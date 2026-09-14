@@ -1,0 +1,46 @@
+# GencTek Etkinlik Takvimi - aiotechs.cloud/genctektakvim
+#
+# Gunlukler: journalctl -u genctektakvim -f
+# Kaynak:    /opt/genctektakvim   Kullanici: genctektakvim
+# Kurulum:   deploy/kur.sh bu dosyayi /etc/systemd/system/ altina kopyalar.
+
+[Unit]
+Description=GencTek Etkinlik Takvimi
+After=network-online.target postgresql.service
+Wants=network-online.target postgresql.service
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+[Service]
+Type=simple
+User=genctektakvim
+Group=genctektakvim
+WorkingDirectory=/opt/genctektakvim
+EnvironmentFile=/opt/genctektakvim/.env
+Environment=NODE_ENV=production
+# Port .env icinde (3030). 3000 docker, 3010/3020/3021 genctek, 3011 portal,
+# 3017 merveapartmani tarafindan kullaniliyor. Yalnizca 127.0.0.1 dinlenir.
+ExecStart=/opt/node24/bin/node /opt/genctektakvim/server.mjs
+
+Restart=on-failure
+RestartSec=5
+
+# --- Sikilastirma -------------------------------------------------------
+# Uygulama diske yazmaz: veri PostgreSQL'de. Bu yuzden yazilabilir dizin yok.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictSUIDSGID=true
+LockPersonality=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=genctektakvim
+
+[Install]
+WantedBy=multi-user.target

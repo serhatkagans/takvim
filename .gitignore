@@ -1,0 +1,16 @@
+# Bagimliliklar
+node_modules/
+
+# Veri: yerel SQLite dosyasi parola ozetleri ve oturumlar icerir; canli veri
+# sunucudaki PostgreSQL'de. Depoya girmez.
+data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# Gizli ayarlar
+.env
+
+# Gecici
+*.tar.gz
+*.dump

@@ -1,0 +1,9 @@
+# Satir sonlari depoda ve calisma kopyasinda LF. Bu makinede core.autocrlf
+# acik: kural olmasa deploy/kur.sh ve .service dosyalari CRLF'e donusur,
+# sunucuda bash "$'\r': command not found" ile duser.
+* text=auto eol=lf
+
+# cmd.exe .bat dosyalarini CRLF bekler.
+*.bat text eol=crlf
+
+*.png binary

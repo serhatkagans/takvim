@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="GençTek çalışma gruplarının 81 ildeki buluşma, atölye ve yarışma programı tek takvimde.">
+<title>GençTek Etkinlik Takvimi</title>
+<link rel="icon" href="genctek.png">
+<link rel="stylesheet" href="style.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container header-inner">
+    <a class="brand" href="./" aria-label="GençTek Etkinlik Takvimi"><span class="brand-mark"><img src="genctek.png" alt=""></span><span>GENÇ<span class="brand-accent">TEK</span> <small>Etkinlik Takvimi</small></span></a>
+    <div class="header-right">
+      <span id="who" class="who" hidden></span>
+      <button id="users-button" class="button button-ghost" hidden>Kullanıcılar</button>
+      <button id="password-button" class="button button-ghost" hidden>Parolamı değiştir</button>
+      <button id="logout-button" class="button button-ghost" hidden>Çıkış yap</button>
+      <button id="login-button" class="button header-cta">Yönetici girişi</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="page-hero">
+    <div class="container hero-inner">
+      <div>
+        <p class="eyebrow">81 il · tek program</p>
+        <h1>GençTek etkinlik takvimi</h1>
+        <p class="hero-lede">Çalışma gruplarının tanışma toplantıları, atölyeleri, maratonları ve sektör buluşmaları burada. İlinizi ve çalışma grubunuzu seçin, programı görün, kendi takviminize ekleyin.</p>
+      </div>
+      <div class="hero-stats">
+        <p class="eyebrow" id="stat-caption">Bu ay</p>
+        <button type="button" class="stat" data-stat="category" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-events">—</strong><span>etkinlik ▾</span></button>
+        <button type="button" class="stat" data-stat="city" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-cities">—</strong><span>il ▾</span></button>
+        <button type="button" class="stat" data-stat="theme" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-themes">—</strong><span>çalışma grubu ▾</span></button>
+        <div id="stat-breakdown" class="stat-breakdown" hidden></div>
+        <small id="stat-note">Saatler Türkiye saatidir (UTC+3). Ayrıntı ve filtre için kutulara tıklayın.</small>
+      </div>
+    </div>
+  </section>
+
+  <section class="container workspace" aria-label="Etkinlik takvimi">
+    <aside>
+      <p class="eyebrow">Takvimi süz</p>
+      <label for="search">Etkinlik ara</label>
+      <input id="search" type="search" placeholder="Etkinlik adı, konum, açıklama…" maxlength="100">
+      <label class="check"><input id="search-all" type="checkbox"> Tüm takvimde ara (geçmiş dâhil)</label>
+      <label for="city">İl</label>
+      <select id="city"></select>
+      <label for="theme">Çalışma grubu</label>
+      <select id="theme"></select>
+      <label for="category">Etkinlik türü</label>
+      <select id="category"></select>
+      <button id="clear" class="text-link">Filtreleri temizle ↗</button>
+
+      <div class="aside-note">
+        <p class="eyebrow">Takvimine ekle</p>
+        <p>Seçtiğin süzgeçlerle oluşan programı Google Takvim, Outlook veya telefonundaki takvime abone olarak ekleyebilirsin. Program değiştikçe takvimin kendiliğinden güncellenir.</p>
+        <input id="feed-url" readonly aria-label="Abonelik adresi">
+        <div class="aside-actions">
+          <button id="feed-copy" class="button button-primary">Adresi kopyala</button>
+          <a id="feed-open" class="text-link" href="takvim.ics">Dosyayı indir ↗</a>
+        </div>
+      </div>
+    </aside>
+
+    <div class="calendar-panel">
+      <div class="panel-head">
+        <div>
+          <p class="eyebrow">Etkinlik programı</p>
+          <h2 id="month-title"></h2>
+        </div>
+        <button id="add" class="button button-primary" hidden>+ Etkinlik ekle</button>
+      </div>
+      <div class="calendar-controls">
+        <div class="nav">
+          <button id="prev" aria-label="Önceki ay">‹</button>
+          <button id="today">Bugün</button>
+          <button id="next" aria-label="Sonraki ay">›</button>
+        </div>
+        <div class="view-toggle">
+          <button id="month-view" aria-pressed="true">Ay</button>
+          <button id="list-view" aria-pressed="false">Liste</button>
+        </div>
+      </div>
+      <p id="status" role="status"></p>
+      <div id="calendar"></div>
+      <div id="agenda" hidden></div>
+      <div class="calendar-footer"><span><i class="today-key"></i> Bugün</span><span id="count"></span></div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="container footer-inner">
+    <span class="brand brand-inverse"><span class="brand-mark"><img src="genctek.png" alt=""></span><span>GENÇ<span class="brand-accent">TEK</span></span></span>
+    <p>Sektörün yeni liderleri · 81 ilde ortak etkinlik programı</p>
+  </div>
+</footer>
+
+<dialog id="login-dialog">
+  <form id="login-form">
+    <div class="dialog-top"><h2>Yönetici girişi</h2><button type="button" class="close" data-close aria-label="Kapat">×</button></div>
+    <p>Merkez veya il yönetici hesabınızla programı düzenleyin.</p>
+    <label>Kullanıcı adı<input name="username" autocomplete="username" required maxlength="100"></label>
+    <label>Parola<input name="password" type="password" autocomplete="current-password" required></label>
+    <p class="error" role="alert"></p>
+    <button class="button button-primary" type="submit">Giriş yap</button>
+  </form>
+</dialog>
+
+<dialog id="password-dialog">
+  <form id="password-form">
+    <div class="dialog-top"><h2>Parola değiştir</h2><button type="button" class="close" data-close aria-label="Kapat">×</button></div>
+    <p id="password-hint">Yeni parolanız en az 12 karakter olmalıdır. Değişiklikten sonra diğer cihazlardaki oturumlarınız kapanır.</p>
+    <label>Mevcut parola<input name="current" type="password" autocomplete="current-password" required></label>
+    <label>Yeni parola<input name="next" type="password" autocomplete="new-password" required minlength="12"></label>
+    <p class="error" role="alert"></p>
+    <button class="button button-primary" type="submit">Parolayı güncelle</button>
+  </form>
+</dialog>
+
+<dialog id="users-dialog" class="wide">
+  <div class="dialog-top"><div><p class="eyebrow">Merkez yönetimi</p><h2>Yönetici hesapları</h2></div><button class="close" data-close aria-label="Kapat">×</button></div>
+  <p class="dialog-lede">İl koordinatörleri yalnızca kendi illerinin etkinliklerini ekleyip düzenleyebilir. Merkez yöneticisi 81 ilin tamamını planlar ve bu ekranı görür.</p>
+  <div id="users-list" class="users-list"></div>
+  <p id="users-error" class="error" role="alert"></p>
+
+  <form id="user-form" class="user-form">
+    <p class="eyebrow">Yeni hesap</p>
+    <div class="form-row">
+      <label>Kullanıcı adı<input name="username" required maxlength="32" autocomplete="off" placeholder="konya" pattern="[a-z0-9][a-z0-9._\-]{2,31}"><small>Küçük harf, rakam ve . - _</small></label>
+      <label>Yetki alanı<select name="city"></select></label>
+    </div>
+    <label>Parola
+      <span class="password-row"><input name="password" type="text" required minlength="12" maxlength="200" autocomplete="off" placeholder="en az 12 karakter"><button type="button" id="generate-password" class="button button-secondary">Parola üret</button></span>
+      <small>Parolayı oluşturduktan sonra ilgili kişiye kendiniz iletin; sistem e-posta göndermez. Kişi ilk girişinden sonra "Parolamı değiştir" ile kendi parolasını belirleyebilir.</small>
+    </label>
+    <p class="error" role="alert"></p>
+    <button class="button button-primary" type="submit">Hesabı oluştur</button>
+  </form>
+</dialog>
+
+<dialog id="event-dialog">
+  <form id="event-form">
+    <div class="dialog-top"><h2 id="form-title">Etkinlik ekle</h2><button type="button" class="close" data-close aria-label="Kapat">×</button></div>
+    <input name="id" type="hidden"><input name="updated" type="hidden">
+    <label>Etkinlik adı<input name="title" required maxlength="160" placeholder="GençTek Konya Yapay Zekâ tanışma toplantısı"></label>
+    <div class="form-row">
+      <label>İl<select name="city" required></select></label>
+      <label>Çalışma grubu<select name="theme" required></select></label>
+    </div>
+    <div class="form-row">
+      <label>Etkinlik türü<select name="category" required></select></label>
+      <label>Durum<select name="status" required></select></label>
+    </div>
+    <label class="check"><input name="all_day" type="checkbox"> Tüm gün süren etkinlik (saat girilmez)</label>
+    <div class="form-row">
+      <label>Başlangıç <small>Türkiye saati</small><input name="start" type="datetime-local" min="2000-01-01T00:00" max="2099-12-31T23:59" required></label>
+      <label>Bitiş <small>Türkiye saati</small><input name="end" type="datetime-local" min="2000-01-01T00:00" max="2099-12-31T23:59" required></label>
+    </div>
+    <label>Konum / çevrim içi platform<input name="location" required maxlength="250" placeholder="Bilim Merkezi konferans salonu veya Zoom"></label>
+    <label>Katılım bağlantısı <small>isteğe bağlı</small><input name="url" type="url" maxlength="500" placeholder="https://..."></label>
+    <label>Açıklama<textarea name="description" rows="4" maxlength="5000" placeholder="Kimler katılabilir, program akışı, iletişim…"></textarea></label>
+    <p class="error" role="alert"></p>
+    <button class="button button-primary" type="submit">Etkinliği kaydet</button>
+  </form>
+</dialog>
+
+<dialog id="detail-dialog">
+  <div class="dialog-top"><p class="eyebrow" id="detail-eyebrow"></p><button class="close" data-close aria-label="Kapat">×</button></div>
+  <h2 id="detail-title"></h2>
+  <p id="detail-status" class="status-badge" hidden></p>
+  <dl class="detail-list">
+    <div><dt>Tarih</dt><dd id="detail-time"></dd></div>
+    <div><dt>Yer</dt><dd id="detail-place"></dd></div>
+    <div><dt>Çalışma grubu</dt><dd id="detail-theme"></dd></div>
+  </dl>
+  <p id="detail-description"></p>
+  <p><a id="detail-url" class="text-link" hidden rel="noopener noreferrer" target="_blank">Katılım bağlantısını aç ↗</a></p>
+  <div class="detail-actions">
+    <a id="export" class="button button-primary" href="#">Takvimime ekle (.ics)</a>
+    <button id="edit" class="button button-secondary" hidden>Düzenle</button>
+    <button id="delete" class="button button-danger" hidden>Sil</button>
+  </div>
+  <p class="error" role="alert"></p>
+</dialog>
+
+</body>
+</html>
