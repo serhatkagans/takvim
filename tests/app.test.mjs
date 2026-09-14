@@ -6,9 +6,30 @@ import { join } from 'node:path';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer } from 'node:net';
+import { inflateRawSync, crc32 } from 'node:zlib';
 import { hashPassword, cities, places, themes, categories, validateEvent, NATIONWIDE, ValidationError } from '../lib/data.mjs';
 import { openDb } from '../lib/db.mjs';
 import { buildIcs } from '../lib/ics.mjs';
+
+/** Test için ZIP okuyucu: merkez dizinden dosyaları açar, CRC'yi doğrular. */
+function unzip(buffer) {
+  const end = buffer.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+  assert.ok(end >= 0, 'ZIP kapanış kaydı var');
+  const files = {};
+  let pointer = buffer.readUInt32LE(end + 16);
+  for (let i = 0; i < buffer.readUInt16LE(end + 10); i++) {
+    assert.equal(buffer.readUInt32LE(pointer), 0x02014b50, 'merkez dizin kaydı');
+    const method = buffer.readUInt16LE(pointer + 10), checksum = buffer.readUInt32LE(pointer + 16), packed = buffer.readUInt32LE(pointer + 20);
+    const nameLength = buffer.readUInt16LE(pointer + 28), extra = buffer.readUInt16LE(pointer + 30), comment = buffer.readUInt16LE(pointer + 32), offset = buffer.readUInt32LE(pointer + 42);
+    const name = buffer.toString('utf8', pointer + 46, pointer + 46 + nameLength);
+    const start = offset + 30 + buffer.readUInt16LE(offset + 26) + buffer.readUInt16LE(offset + 28);
+    const raw = buffer.subarray(start, start + packed);
+    files[name] = method === 8 ? inflateRawSync(raw) : raw;
+    assert.equal(crc32(files[name]), checksum, `${name} CRC`);
+    pointer += 46 + nameLength + extra + comment;
+  }
+  return files;
+}
 
 const merkez = { city: null };
 const sample = { title: 'Yapay zekâ tanışma toplantısı', city: 'Ankara', category: 'Tanışma toplantısı', theme: 'Yapay Zeka', start: '2026-09-16T09:00', end: '2026-09-17T11:00', location: 'Bilim merkezi', description: 'Deneme kaydı', status: 'Planlandı', url: 'https://genctek.eba.gov.tr/' };
@@ -160,6 +181,28 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
     assert.equal(feedText.match(/BEGIN:VEVENT/g).length, 2);
     assert.equal((await request('/takvim.ics?il=Yok')).status, 400);
     assert.match(await (await request('/takvim.ics?id=' + id)).text(), /BEGIN:VEVENT/);
+
+    /* Aylık faaliyet raporu (Word): yalnızca yönetici, süzgeçler uygulanır */
+    assert.equal((await request('/api/rapor?ay=2026-09')).status, 401, 'ziyaretçi rapor indiremez');
+    assert.equal((await request('/api/rapor?ay=2026-13', 'GET', null, cookie)).status, 400);
+    assert.equal((await request('/api/rapor?ay=2026-09&il=Yok', 'GET', null, cookie)).status, 400);
+    const rapor = await request('/api/rapor?ay=2026-09', 'GET', null, ilCookie);
+    assert.equal(rapor.status, 200, 'il yöneticisi de indirebilir');
+    assert.match(rapor.headers.get('content-type'), /wordprocessingml\.document/);
+    assert.match(rapor.headers.get('content-disposition'), /genctek-faaliyet-2026-09\.docx/);
+    const parts = unzip(Buffer.from(await rapor.arrayBuffer()));
+    for (const part of ['[Content_Types].xml', '_rels/.rels', 'word/document.xml', 'word/styles.xml', 'word/footer1.xml', 'word/_rels/document.xml.rels', 'word/media/genctek.png'])
+      assert.ok(parts[part], part + ' pakette');
+    const documentXml = parts['word/document.xml'].toString('utf8');
+    assert.match(documentXml, /Eylül 2026/);
+    assert.match(documentXml, /Yapay zekâ tanışma toplantısı/);
+    assert.match(documentXml, /Deneme kaydı/, 'ayrıntılar bölümü');
+    assert.match(documentXml, /w:orient="landscape"/);
+    assert.equal(documentXml.match(/<w:tr>/g).length > 2, true);
+    const bos = unzip(Buffer.from(await (await request('/api/rapor?ay=2026-09&il=' + encodeURIComponent('Ankara'), 'GET', null, cookie)).arrayBuffer()));
+    assert.match(bos['word/document.xml'].toString('utf8'), /seçilen süzgeçlerle eşleşen kayıtlı etkinlik bulunmuyor/);
+    const ekim = unzip(Buffer.from(await (await request('/api/rapor?ay=2026-10', 'GET', null, cookie)).arrayBuffer()));
+    assert.doesNotMatch(ekim['word/document.xml'].toString('utf8'), /Yapay zekâ/, 'başka ayın etkinliği girmez');
 
     /* Parola değiştirme: eskisi geçersizleşir, diğer oturumlar kapanır */
     assert.equal((await request('/api/password', 'POST', { current: 'yanlis', next: 'yeni-parola-12345' }, cookie)).status, 401);

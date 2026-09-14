@@ -28,7 +28,7 @@ async function identity() {
   meta = await api('api/meta');
   const user = meta.user;
   $('#login-button').hidden = !!user;
-  for (const id of ['#logout-button', '#password-button', '#add']) $(id).hidden = !user;
+  for (const id of ['#logout-button', '#password-button', '#add', '#report']) $(id).hidden = !user;
   /* Kullanıcı yönetimi yalnızca merkez yöneticisinde: il koordinatörü başka
      hesapları göremez, sunucu da bu uçları ona kapatır. */
   $('#users-button').hidden = !user?.central;
@@ -114,6 +114,7 @@ function render() {
   $('#stat-themes').textContent = new Set(current.map(e => e.theme)).size;
   $('#stat-note').textContent = (nationwide ? `Ayrıca ${nationwide} "Türkiye geneli" etkinlik var. ` : '') + 'Saatler Türkiye saatidir (UTC+3). Ayrıntı ve filtre için kutulara tıklayın.';
   renderBreakdown(current);
+  $('#report').title = `${monthFormat.format(month)} etkinliklerini, seçili süzgeçlerle Word belgesi olarak indirir`;
   $('#feed-url').value = feedUrl();
   $('#feed-open').href = feedUrl();
 
@@ -366,6 +367,29 @@ $('#password-form').onsubmit = submitHandler(async form => {
   $('#status').textContent = 'Parolanız güncellendi.';
   setTimeout(() => { if ($('#status').textContent === 'Parolanız güncellendi.') $('#status').textContent = ''; }, 4000);
 });
+
+/** Görüntülenen ayın faaliyet programını Word olarak indirir. Bağlantı yerine
+    fetch: oturum düşmüşse tarayıcı hata JSON'unu .docx diye kaydetmesin,
+    mesaj sayfada görünsün. */
+$('#report').onclick = async () => {
+  const button = $('#report'), ay = dateKey(month).slice(0, 7);
+  const params = new URLSearchParams({ ay });
+  if ($('#city').value) params.set('il', $('#city').value);
+  if ($('#theme').value) params.set('tema', $('#theme').value);
+  if ($('#category').value) params.set('tur', $('#category').value);
+  button.disabled = true;
+  try {
+    const response = await fetch('api/rapor?' + params);
+    if (!response.ok) throw Object.assign(Error((await response.json().catch(() => ({}))).error || 'Rapor oluşturulamadı.'), { status: response.status });
+    const link = Object.assign(document.createElement('a'), { href: URL.createObjectURL(await response.blob()), download: `genctek-faaliyet-${ay}.docx` });
+    document.body.append(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 30000);
+  } catch (error) {
+    /* Oturum süresi dolduysa (8 saat) yönetici düğmeleri de gizlensin. */
+    if (error.status === 401) { await identity().catch(() => {}); render(); }
+    $('#status').textContent = error.message;
+  } finally { button.disabled = false; }
+};
 
 $('#event-form').elements.all_day.addEventListener('change', () => applyAllDay(false));
 $('#add').onclick = () => editEvent();

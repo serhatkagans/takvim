@@ -11,6 +11,19 @@ Sunucuda hangi sürümün çalıştığı: `ssh genctek 'cat /opt/genctektakvim/
 
 ## Yayımlanmamış
 
+## v2.2.0 — 14 Eylül 2026
+
+- **Aylık faaliyet raporu (Word)**: giriş yapmış yöneticide takvim başlığında
+  "Aylık faaliyet indir (Word)" düğmesi. Görüntülenen ayın etkinliklerini,
+  kenar çubuğundaki süzgeçlerle (il / çalışma grubu / tür) `.docx` olarak
+  indirir: logo ve başlık, özet kartları, etkinlik programı tablosu (A4 yatay,
+  başlık satırı her sayfada tekrarlanır), çalışma grubu ve il dağılımı,
+  açıklama ve katılım bağlantılarıyla etkinlik ayrıntıları, sayfa numaralı
+  altbilgi. Uç: `GET /api/rapor?ay=YYYY-AA[&il=&tema=&tur=]`, yalnızca oturum
+  açık yöneticiye.
+- Belge ek paket kullanılmadan üretilir (`lib/rapor.mjs`, `lib/zip.mjs`);
+  Word 16'da açılıp PDF'e çevrilerek doğrulandı.
+
 ## v2.1.0 — 14 Eylül 2026
 
 İlk git sürümü; `https://aiotechs.cloud/genctektakvim/` adresindeki ilk canlı kurulum.

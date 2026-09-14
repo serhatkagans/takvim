@@ -5,8 +5,11 @@ import { cities, places, categories, themes, statuses, NATIONWIDE, verifyPasswor
 import { openDb } from './lib/db.mjs';
 import { listUsers, createUser, resetPassword, setCity, removeUser } from './lib/users.mjs';
 import { buildIcs } from './lib/ics.mjs';
+import { buildRapor } from './lib/rapor.mjs';
 
 const db = await openDb();
+const logo = await readFile(new URL('./public/genctek.png', import.meta.url));
+const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const dummyHash = hashPassword(randomBytes(24).toString('hex'));
 const port = Number(process.env.PORT || 3010);
 const origin = process.env.PUBLIC_ORIGIN || `http://localhost:${port}`;
@@ -136,6 +139,27 @@ const server = createServer(async (req, res) => {
 
     if (url.pathname === '/api/meta' && req.method === 'GET')
       return send(res, 200, { cities, places, categories, themes, statuses, nationwide: NATIONWIDE, maxRangeDays: MAX_RANGE_DAYS, minPassword: MIN_PASSWORD, user: user ? { username: user.username, city: user.city, central: !user.city } : null });
+
+    /* ---- Aylık faaliyet programı (Word) — yalnızca yöneticiler ----------
+       Kenar çubuğundaki süzgeçler (il / çalışma grubu / tür) aynen uygulanır;
+       aya değen her etkinlik girer (ay sınırını aşan çok günlükler dahil). */
+    if (url.pathname === '/api/rapor' && req.method === 'GET') {
+      if (!user) return send(res, 401, { error: 'Faaliyet raporunu indirmek için giriş yapın.' });
+      const month = url.searchParams.get('ay') || '';
+      if (!/^20\d\d-(0[1-9]|1[0-2])$/.test(month)) return send(res, 400, { error: 'Geçerli bir ay seçin.' });
+      const filters = { city: url.searchParams.get('il') || '', theme: url.searchParams.get('tema') || '', category: url.searchParams.get('tur') || '' };
+      if ((filters.city && !places.includes(filters.city)) || (filters.theme && !themes.includes(filters.theme)) || (filters.category && !categories.includes(filters.category))) return send(res, 400, { error: 'Geçersiz süzgeç.' });
+      /* Date.UTC'nin ay dizini sıfırdan başlar: "09" → 9 → Ekim, yani sonraki ayın ilk günü. */
+      const next = dayString(new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 1)));
+      const clauses = ['start<?', '"end">?'], params = [next + 'T00:00', month + '-01T00:00'];
+      if (filters.city) { clauses.push('city=?'); params.push(filters.city); }
+      if (filters.theme) { clauses.push('theme=?'); params.push(filters.theme); }
+      if (filters.category) { clauses.push('category=?'); params.push(filters.category); }
+      const rows = await liveEvents(clauses.join(' AND '), params);
+      const file = buildRapor({ month, events: rows, filters, nationwide: NATIONWIDE, generatedBy: user.username, logo });
+      res.writeHead(200, { 'Content-Type': DOCX, 'Content-Disposition': `attachment; filename="genctek-faaliyet-${month}.docx"`, 'Content-Length': file.length });
+      return res.end(file);
+    }
 
     /* ---- Oturum --------------------------------------------------------- */
     if (url.pathname === '/api/login' && req.method === 'POST') {
