@@ -61,7 +61,10 @@ httpd -t && apachectl graceful      # restart DEĞİL, komşu siteler kesilir
 
 ## Yayın
 
-Proje git deposu değil; kod arşiv olarak gönderilir:
+Proje yerelde git deposudur (sürümler `SURUMLER.md`, etiketler `vX.Y.Z`) ama
+uzak depo yok; sunucu koddan çekmez, çalışma kopyası arşiv olarak gönderilir.
+Yayından önce değişiklikleri commit'leyin ki sunucudaki kod bir etikete ya da
+commit'e karşılık gelsin:
 
 ```powershell
 .\deploy\yayinla.ps1
