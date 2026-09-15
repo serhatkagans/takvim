@@ -116,7 +116,7 @@ ssh genctek "cd /tmp && sudo -u postgres psql -d genctektakvim -c 'TRUNCATE sess
 ssh genctek
 read -rsp 'Parola (en az 12 karakter): ' USER_PASSWORD; export USER_PASSWORD
 sudo -u genctektakvim -H --preserve-env=USER_PASSWORD bash -c 'set -a; . /opt/genctektakvim/.env; set +a;
-  cd /opt/genctektakvim && /opt/node24/bin/node scripts/user.mjs ekle admin'
+  cd /opt/genctektakvim && /opt/node24/bin/node scripts/user.mjs ekle <tc-kimlik-no>'
 unset USER_PASSWORD
 ```
 

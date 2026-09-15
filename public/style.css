@@ -74,10 +74,12 @@ p { margin-top: 0 }
 
 /* --- Giriş bölümü ------------------------------------------------------ */
 .page-hero { background: var(--color-bg-subtle); border-bottom: 1px solid var(--color-border); padding: 56px 0 48px }
-.hero-inner { display: grid; grid-template-columns: 1.35fr .65fr; gap: 48px; align-items: center }
-.hero-lede { font-size: 1.12rem; max-width: 62ch; margin: 0 }
-.hero-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px }
-.hero-stats .eyebrow { grid-column: 1 / -1; margin: 0; text-transform: capitalize }
+.hero-inner { display: grid; grid-template-columns: 1fr; gap: 28px; align-items: center }
+.hero-lede { font-size: 1.12rem; margin: 0 }
+.hero-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px }
+.stats-head { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; gap: 8px 16px; flex-wrap: wrap }
+.hero-stats .eyebrow { margin: 0; text-transform: capitalize }
+.stats-toggle { margin: 0; cursor: pointer }
 .hero-stats .stat { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 12px; padding: 16px; display: grid; text-align: left; box-shadow: var(--shadow-sm); cursor: pointer; transition: border-color 120ms, transform 120ms }
 .hero-stats .stat:hover { border-color: var(--color-brand); transform: translateY(-1px) }
 .hero-stats .stat[aria-expanded="true"] { border-color: var(--color-brand); box-shadow: 0 0 0 2px var(--color-brand) }
@@ -118,6 +120,12 @@ aside input:focus, aside select:focus { border-color: var(--color-brand); box-sh
 .nav, .view-toggle { display: flex; gap: 6px }
 .nav button, .view-toggle button { min-height: 38px; min-width: 40px; padding: 6px 14px; border: 1px solid var(--color-border-strong); border-radius: 6px; background: var(--color-surface); font-family: var(--font-display); font-weight: 650; font-size: .88rem; cursor: pointer }
 .nav button:hover, .view-toggle button:hover { border-color: var(--color-brand); color: var(--color-brand) }
+.pickers { display: flex; gap: 6px; flex-wrap: wrap }
+.pickers select { min-height: 38px; border: 1px solid var(--color-border-strong); border-radius: 6px; padding: 6px 10px; background: var(--color-surface); font-family: var(--font-display); font-weight: 600; font-size: .88rem; max-width: 100% }
+.day-more { border: 0; background: none; padding: 2px 4px; text-align: left; color: var(--color-brand); font-size: .72rem; font-weight: 700; cursor: pointer }
+.day-more:hover { text-decoration: underline }
+.search-results { border-top: 1px solid var(--color-border) }
+.search-results h3 { margin: 0; padding: 18px 24px 6px; font-size: 1rem; color: var(--color-text-strong) }
 .view-toggle button[aria-pressed="true"] { background: var(--color-text-strong); border-color: var(--color-text-strong); color: #fff }
 #status { margin: 0; padding: 0 24px; color: var(--color-text-muted); font-size: .85rem }
 #status:not(:empty) { padding: 14px 24px; color: var(--color-danger) }
@@ -138,12 +146,20 @@ aside input:focus, aside select:focus { border-color: var(--color-brand); box-sh
 .event-chip span { display: block; font-weight: 400; opacity: .85 }
 .event-chip.is-ertelendi { border-left-color: var(--color-warning); background: color-mix(in srgb, var(--color-warning) 10%, var(--color-surface)); color: var(--color-warning) }
 .event-chip.is-iptal { border-left-color: var(--color-cool-gray, #939598); background: var(--color-bg-subtle); color: var(--color-text-muted); text-decoration: line-through }
+/* Planlanan gri, tamamlanan (varsayılan) kırmızı. */
+.event-chip.is-planlandi { border-left-color: var(--color-cool-gray, #939598); background: color-mix(in srgb, var(--color-cool-gray, #939598) 16%, var(--color-surface)); color: var(--color-text-strong) }
+.event-chip.is-planlandi:hover { background: var(--color-text-strong); color: #fff }
+.legend { display: flex; gap: 6px 16px; flex-wrap: wrap }
+.status-key { display: inline-block; width: 12px; height: 12px; border-radius: 3px; background: var(--color-brand); vertical-align: -2px; margin-right: 6px }
+.status-key.is-planlandi { background: var(--color-cool-gray, #939598) }
+.status-key.is-ertelendi { background: var(--color-warning) }
 
 #agenda { padding: 8px 0 }
 .agenda-item { display: grid; grid-template-columns: 78px 1fr; gap: 18px; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--color-border); background: none; padding: 16px 24px; cursor: pointer }
 .agenda-item:hover { background: var(--color-bg-subtle) }
 .agenda-date { display: grid; place-content: center; text-align: center; border-radius: 8px; background: var(--color-bg-brand-tint); color: var(--color-brand); padding: 8px; font-family: var(--font-display); font-weight: 800; font-size: .95rem; font-variant-numeric: tabular-nums }
 .agenda-date small { display: block; font-size: .72rem; font-weight: 600; opacity: .85 }
+.agenda-item.is-planlandi .agenda-date { background: color-mix(in srgb, var(--color-cool-gray, #939598) 16%, var(--color-surface)); color: var(--color-text-strong) }
 .agenda-body strong { display: block; color: var(--color-text-strong); font-size: 1rem }
 .agenda-body small { display: block; color: var(--color-text-muted); font-size: .82rem; margin-top: 2px }
 .empty { padding: 56px 24px; text-align: center; color: var(--color-text-muted) }
@@ -170,14 +186,47 @@ dialog input:focus, dialog select:focus, dialog textarea:focus { border-color: v
 dialog textarea { resize: vertical }
 dialog .check { font-family: var(--font-display); font-weight: 650; color: var(--color-text-strong) }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px }
+.form-row-3 { grid-template-columns: repeat(3, 1fr) }
+.choice { border: 0; margin: 0; padding: 0; min-width: 0; display: grid; gap: 8px }
+.choice legend { font-family: var(--font-display); font-size: .88rem; font-weight: 650; color: var(--color-text-strong); padding: 0; margin-bottom: 8px }
+.choice legend small { font-weight: 400; color: var(--color-text-muted) }
+.choice-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px }
+dialog label.choice-card { display: flex; align-items: center; gap: 8px; border: 1px solid var(--color-border-strong); border-radius: 8px; padding: 10px 12px; font-size: .85rem; line-height: 1.25; cursor: pointer }
+dialog label.choice-card:hover { border-color: var(--color-brand) }
+dialog label.choice-card:has(input:checked) { border-color: var(--color-brand); background: var(--color-bg-brand-tint); box-shadow: 0 0 0 1px var(--color-brand) }
+dialog label.choice-card:has(input:disabled) { opacity: .5; cursor: not-allowed }
+.check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 2px 12px }
+.check-scroll { max-height: 220px; overflow-y: auto; border: 1px solid var(--color-border); border-radius: 8px; padding: 8px 10px }
+dialog .check-grid label { display: flex; align-items: center; gap: 8px; font-weight: 400; font-size: .85rem; padding: 3px 0 }
+dialog .check-grid label.is-passive { color: var(--color-text-muted); cursor: not-allowed }
+dialog .choice input[type="radio"], dialog .choice input[type="checkbox"] { width: auto; min-height: auto; margin: 0; accent-color: var(--color-brand) }
 .error:empty { display: none }
 .error { margin: 0; padding: 12px 14px; border: 1px solid var(--color-danger); border-radius: 8px; background: color-mix(in srgb, var(--color-danger) 8%, var(--color-surface)); color: var(--color-danger); font-size: .88rem }
 .detail-list { display: grid; gap: 10px; margin: 0 0 18px; padding: 16px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-bg-subtle); font-size: .9rem }
 .detail-list > div { display: grid; grid-template-columns: 120px 1fr; gap: 12px }
 .detail-list dt { font-family: var(--font-display); font-weight: 700; color: var(--color-text-strong) }
 .detail-list dd { margin: 0 }
-#detail-description { white-space: pre-wrap }
+.detail-block { margin: 0 0 16px }
+.detail-block h3 { margin: 0 0 6px; font-family: var(--font-display); font-size: .76rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--color-text-muted) }
+.detail-block p { margin: 0; white-space: pre-wrap }
+.detail-block ul { margin: 0; padding-left: 18px }
+.photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; margin: 0 0 16px }
+.photo-grid img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; border: 1px solid var(--color-border) }
+/* Formdaki "+ ekle" düğmeleri, fotoğraf önizlemeleri ve paydaş satırları */
+.inline-add { justify-self: start; min-height: 38px; padding: 7px 14px; font-size: .85rem }
+.preset-row { display: flex; flex-wrap: wrap; gap: 8px }
+.partner-rows { display: grid; gap: 8px }
+.partner-rows:empty { display: none }
+.partner-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: center }
+.partner-row button { width: 40px; min-height: 44px; border: 1px solid var(--color-border-strong); border-radius: 6px; background: var(--color-surface); font-size: 1.2rem; cursor: pointer }
+.partner-row button:hover { border-color: var(--color-danger); color: var(--color-danger) }
+.photo-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px }
+.photo-list:empty { display: none }
+.photo-thumb { position: relative; aspect-ratio: 1; border-radius: 8px; overflow: hidden; border: 1px solid var(--color-border) }
+.photo-thumb img { display: block; width: 100%; height: 100%; object-fit: cover }
+.photo-thumb button { position: absolute; top: 4px; right: 4px; width: 28px; height: 28px; border: 0; border-radius: 9999px; background: rgba(0,0,0,.62); color: #fff; font-size: 1.05rem; line-height: 1; cursor: pointer }
 .status-badge { display: inline-block; width: max-content; border-radius: 4px; padding: 4px 10px; font-family: var(--font-display); font-size: .78rem; font-weight: 700; background: color-mix(in srgb, var(--color-warning) 12%, var(--color-surface)); color: var(--color-warning); margin: 0 0 14px }
+.status-badge.is-tamamlandi { background: var(--color-bg-brand-tint); color: var(--color-brand-active) }
 .status-badge.is-iptal { background: color-mix(in srgb, var(--color-danger) 10%, var(--color-surface)); color: var(--color-danger) }
 .detail-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 20px }
 

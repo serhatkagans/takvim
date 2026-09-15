@@ -6,13 +6,16 @@ Arayüz GençTek portalının marka paletini kullanır: Pantone 7621 C (`#c4161c
 
 ## Özellikler
 
-- **Ay ve liste görünümü**, il / çalışma grubu / etkinlik türü süzgeçleri.
+- **Ay ve liste görünümü**, kapsam-il / çalışma grubu / etkinlik türü süzgeçleri. Takvimde planlanan etkinlikler gri, tamamlananlar kırmızıdır.
+- **Sayaç kartları**: tamamlanan, planlanan / devam eden, il, çalışma grubu, öğrenci, öğretmen ve paydaş sayıları. Varsayılan olarak tüm etkinlikleri, "Yalnızca görüntülenen ay" seçiliyse o ayı sayar.
+- **Etkinlik türü** (Temel GençTek / İl / Çalışma grubu etkinliği) ve türün alt seçenekleri (çoklu seçim; çalışma grubu etkinliğinde çalışma grupları). Alt seçenek listeleri `lib/data.mjs` içindedir.
+- **Kapsam**: uluslararası, ulusal, il veya ortak iller (birden çok il).
+- **Katılım biçimi**: yüz yüze (yer bilgisi zorunlu) veya çevrim içi; isteğe bağlı öğrenci / öğretmen / diğer katılımcı sayıları ve "+ Paydaş ekle" ile kişi – kurum paydaş listesi.
+- **Amaç** ve **açıklama / kapsam** metinleri; etkinlik başına en fazla **5 fotoğraf** (tarayıcıda 1600 px'e küçültülüp veritabanındaki `photos` tablosunda saklanır, yedeğe girer).
 - **Genel arama**: "Tüm takvimde ara" seçiliyken arama görüntülenen aya değil, tüm kayıtlara uygulanır.
 - **Takvim aboneliği**: `/takvim.ics` adresi Google Takvim, Outlook ve telefon takvimlerinin abone olabileceği bir akıştır; `?il=`, `?tema=`, `?tur=` süzgeçlerini kabul eder. `?id=` ile tek etkinlik indirilir. Program değiştikçe abone takvimler kendiliğinden güncellenir.
-- **Tüm gün etkinlikleri**, çok günlük etkinlikler ve **etkinlik durumu** (Planlandı / Ertelendi / İptal edildi — iptal, ICS'te `STATUS:CANCELLED` olarak gider).
-- **Katılım bağlantısı** alanı (başvuru formu, çevrim içi oturum adresi).
-- **"Türkiye geneli"** seçeneği: tek bir ile bağlanamayan ulusal/çevrim içi etkinlikler için.
-- **İki yetki düzeyi**: merkez yöneticisi 81 ilin tamamını, il yöneticisi yalnızca kendi ilini planlar.
+- **Tüm gün etkinlikleri**, çok günlük etkinlikler ve **etkinlik durumu** (Planlandı / Tamamlandı / Ertelendi / İptal edildi — iptal, ICS'te `STATUS:CANCELLED` olarak gider).
+- **İki yetki düzeyi**: merkez yöneticisi her kapsamı, il yöneticisi yalnızca kendi ilini içeren il ve ortak il etkinliklerini planlar.
 - **Eşzamanlı düzenleme koruması**: iki yönetici aynı etkinliği açarsa ikinci kayıt sessizce ezilmez, çakışma bildirilir.
 - **Yumuşak silme**: silinen etkinlik takvimden kalkar, veritabanı satırı arşivde kalır.
 - **Panel içinden parola değiştirme**; değişiklikte diğer cihazlardaki oturumlar kapanır.
@@ -27,9 +30,11 @@ Node.js 24 gerekir. Harici npm bağımlılığı yoktur. SQLite, Node.js'in yerl
 
 ```powershell
 $env:USER_PASSWORD = Read-Host 'En az 12 karakterlik parola' -MaskInput
-npm run user -- ekle admin
+npm run user -- ekle 12345678901
 Remove-Item Env:USER_PASSWORD
 ```
+
+Kullanıcı adı T.C. kimlik numarasıdır (denetim haneleri doğrulanır); örnekteki numarayı kendi numaranızla değiştirin. Numara ekranda ve raporlarda `123******01` biçiminde maskelenir.
 
 `-MaskInput` PowerShell 7 içindir. Eski PowerShell'de `Read-Host -AsSecureString` ve uygun secret yönetimi kullanın. Varsayılan hesap veya parola yoktur.
 
@@ -37,9 +42,9 @@ Remove-Item Env:USER_PASSWORD
 
 ```
 npm run user -- liste                  hesapları ve yetki alanlarını gösterir
-npm run user -- ekle admin             merkez yöneticisi (81 ilin tamamı)
-npm run user -- ekle konya Konya       yalnızca Konya'yı planlayabilen il yöneticisi
-npm run user -- sil konya              hesabı kaldırır
+npm run user -- ekle <tc-no>           merkez yöneticisi (81 ilin tamamı)
+npm run user -- ekle <tc-no> Konya     yalnızca Konya'yı planlayabilen il yöneticisi
+npm run user -- sil <tc-no>            hesabı kaldırır
 ```
 
 Parola her zaman `USER_PASSWORD` ortam değişkeninden okunur; komut satırına yazılsa kabuk geçmişinde ve süreç listesinde açıkta kalırdı. Aynı komutu mevcut bir kullanıcı için çalıştırmak parolasını değiştirir, yetki alanını günceller ve açık oturumlarını kapatır. Etkinlik kaydı bulunan bir hesap `sil` ile tamamen kaldırılmaz — geçmişin kopmaması için oturumları kapatılır ve parolası kullanılamaz hale getirilir.
@@ -63,7 +68,7 @@ TRUST_PROXY=true
 ```bash
 read -rsp 'Yönetici parolası (en az 12 karakter): ' USER_PASSWORD
 export USER_PASSWORD
-docker compose exec -e USER_PASSWORD takvim node scripts/user.mjs ekle admin
+docker compose exec -e USER_PASSWORD takvim node scripts/user.mjs ekle <tc-kimlik-no>
 unset USER_PASSWORD
 ```
 
@@ -90,7 +95,7 @@ Her yedek için farklı hedef klasör kullanın; veritabanı ile varsa `-wal` ve
 
 ## Doğrulama ve kapsam
 
-`npm test`: il/tema listeleri, tarih ve tüm gün doğrulaması, il yöneticisi yetkisi, ICS üretimi (satır katlama ve UTC dönüşümü dâhil), herkese açık okuma, kaynak (CSRF) kontrolü, CRUD, sürüm çakışması, arama, abonelik akışı, parola değiştirme, yumuşak silme ve disk kalıcılığı.
+`npm test`: il/tema listeleri, tarih ve tüm gün doğrulaması, il yöneticisi yetkisi, ICS üretimi (satır katlama ve UTC dönüşümü dâhil), herkese açık okuma, kaynak (CSRF) kontrolü, CRUD, sürüm çakışması, arama, abonelik akışı, parola değiştirme, yumuşak silme, disk kalıcılığı, T.C. kimlik no doğrulaması ve alt tür süzgeci.
 
 Saatler Türkiye saati (UTC+3) olarak girilir ve gösterilir; Türkiye'de yaz saati uygulaması olmadığı için ICS çıktısında saatler doğrudan UTC'ye çevrilir. Çok günlük etkinlikler kapsadıkları tüm günlerde görünür. Bir etkinlik en fazla 366 gün sürebilir; tek istekte en çok 100 günlük aralık okunur, arama en çok 200 sonuç döndürür.
 

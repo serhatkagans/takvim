@@ -11,6 +11,27 @@ Sunucuda hangi sürümün çalıştığı: `ssh genctek 'cat /opt/genctektakvim/
 
 ## Yayımlanmamış
 
+## v2.3.0 — 15 Eylül 2026
+
+- **Etkinlik modeli**: kapsam (uluslararası / ulusal / il / ortak iller), tür ve
+  çoklu alt tür (Temel GençTek etkinliği alt türleri, çalışma grupları; pasif
+  gruplar görünür ama seçilemez), çevrim içi işareti, öğrenci / öğretmen / diğer
+  katılımcı sayıları, amaç, paydaşlar ve en fazla 5 fotoğraf (`photos` tablosu).
+  Eski kayıtlar açılışta yeni modele çevrilir; eski grup / tür adları yeni
+  listelere uydurulur (`lib/db.mjs`).
+- **Faaliyet raporu**: Word'e ek olarak Excel (`.xlsx`); ay yerine serbest dönem
+  (en fazla 3 yıl) ve hızlı seçimler — bu / önceki ay, 1. / 2. dönem,
+  eğitim-öğretim yılı, takvim yılı. Uç: `GET /api/rapor?bas=&bit=&bicim=docx|xlsx`
+  (`ay=` çalışmaya devam eder).
+- **Süzgeçler**: kenar çubuğunda "Etkinlik alt türü" (türlerine göre gruplu;
+  seçilince tür de seçilir), çalışma grubu listesinde pasif gruplar. Abonelik ve
+  rapor `alt=` parametresini alır.
+- **Hesaplar**: yeni hesapların kullanıcı adı T.C. kimlik numarasıdır (denetim
+  haneleri doğrulanır), ekranda ve raporda `123******01` biçiminde maskelenir.
+  Önceden açılmış hesaplar (ör. `admin`) aynen giriş yapar. Yetki alanı etiketi
+  "Sorumlu olduğu il" oldu.
+- Görünüm: sayaç kartı etiketleri büyük harfle başlar, giriş cümlesi tek satır.
+
 ## v2.2.0 — 14 Eylül 2026
 
 - **Aylık faaliyet raporu (Word)**: giriş yapmış yöneticide takvim başlığında

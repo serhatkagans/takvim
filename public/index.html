@@ -29,14 +29,21 @@
     <div class="container hero-inner">
       <div>
         <p class="eyebrow">81 il · tek program</p>
-        <h1>GençTek etkinlik takvimi</h1>
-        <p class="hero-lede">Çalışma gruplarının tanışma toplantıları, atölyeleri, maratonları ve sektör buluşmaları burada. İlinizi ve çalışma grubunuzu seçin, programı görün, kendi takviminize ekleyin.</p>
+        <h1>Akran Öğrenme Modeli ve Genç Bilişim Ekosistemi</h1>
+        <p class="hero-lede">İl GençTek koordinatörleri tarafından tamamlanan ve planlanan etkinlikler için doldurulur.</p>
       </div>
       <div class="hero-stats">
-        <p class="eyebrow" id="stat-caption">Bu ay</p>
-        <button type="button" class="stat" data-stat="category" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-events">—</strong><span>etkinlik ▾</span></button>
-        <button type="button" class="stat" data-stat="city" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-cities">—</strong><span>il ▾</span></button>
-        <button type="button" class="stat" data-stat="theme" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-themes">—</strong><span>çalışma grubu ▾</span></button>
+        <div class="stats-head">
+          <p class="eyebrow" id="stat-caption">Tüm etkinlikler</p>
+          <label class="check stats-toggle"><input id="stat-month" type="checkbox"> Yalnızca görüntülenen ay</label>
+        </div>
+        <button type="button" class="stat" data-stat="done" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-done">—</strong><span>Tamamlanan etkinlik ▾</span></button>
+        <button type="button" class="stat" data-stat="upcoming" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-upcoming">—</strong><span>Planlanan / devam eden ▾</span></button>
+        <button type="button" class="stat" data-stat="cities" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-cities">—</strong><span>İlde etkinlik yapılıyor ▾</span></button>
+        <button type="button" class="stat" data-stat="themes" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-themes">—</strong><span>Çalışma grubu ▾</span></button>
+        <button type="button" class="stat" data-stat="students" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-students">—</strong><span>Öğrenci ▾</span></button>
+        <button type="button" class="stat" data-stat="teachers" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-teachers">—</strong><span>Öğretmen ▾</span></button>
+        <button type="button" class="stat" data-stat="stakeholders" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-stakeholders">—</strong><span>Paydaş / kurum ▾</span></button>
         <div id="stat-breakdown" class="stat-breakdown" hidden></div>
         <small id="stat-note">Saatler Türkiye saatidir (UTC+3). Ayrıntı ve filtre için kutulara tıklayın.</small>
       </div>
@@ -47,14 +54,15 @@
     <aside>
       <p class="eyebrow">Takvimi süz</p>
       <label for="search">Etkinlik ara</label>
-      <input id="search" type="search" placeholder="Etkinlik adı, konum, açıklama…" maxlength="100">
-      <label class="check"><input id="search-all" type="checkbox"> Tüm takvimde ara (geçmiş dâhil)</label>
-      <label for="city">İl</label>
+      <input id="search" type="search" placeholder="Örn. Tek Maraton — tüm tarihlerde arar" maxlength="100">
+      <label for="city">Kapsam / il</label>
       <select id="city"></select>
       <label for="theme">Çalışma grubu</label>
       <select id="theme"></select>
       <label for="category">Etkinlik türü</label>
       <select id="category"></select>
+      <label for="subtype" id="subtype-label">Etkinlik alt türü</label>
+      <select id="subtype"></select>
       <button id="clear" class="text-link">Filtreleri temizle ↗</button>
 
       <div class="aside-note">
@@ -75,7 +83,7 @@
           <h2 id="month-title"></h2>
         </div>
         <div class="panel-actions">
-          <button id="report" class="button button-secondary" hidden>Aylık faaliyet indir (Word)</button>
+          <button id="report" class="button button-secondary" hidden>Faaliyet raporu indir</button>
           <button id="add" class="button button-primary" hidden>+ Etkinlik ekle</button>
         </div>
       </div>
@@ -85,6 +93,11 @@
           <button id="today">Bugün</button>
           <button id="next" aria-label="Sonraki ay">›</button>
         </div>
+        <div class="pickers">
+          <select id="month-pick" aria-label="Ay"></select>
+          <select id="year-pick" aria-label="Yıl"></select>
+          <select id="city-pick" aria-label="Kapsam / il"></select>
+        </div>
         <div class="view-toggle">
           <button id="month-view" aria-pressed="true">Ay</button>
           <button id="list-view" aria-pressed="false">Liste</button>
@@ -93,7 +106,11 @@
       <p id="status" role="status"></p>
       <div id="calendar"></div>
       <div id="agenda" hidden></div>
-      <div class="calendar-footer"><span><i class="today-key"></i> Bugün</span><span id="count"></span></div>
+      <section id="search-results" class="search-results" hidden aria-live="polite">
+        <h3 id="search-title"></h3>
+        <div id="search-list"></div>
+      </section>
+      <div class="calendar-footer"><span class="legend"><span><i class="today-key"></i> Bugün</span><span><i class="status-key is-planlandi"></i> Planlandı</span><span><i class="status-key"></i> Tamamlandı</span><span><i class="status-key is-ertelendi"></i> Ertelendi</span></span><span id="count"></span></div>
     </div>
   </section>
 </main>
@@ -109,7 +126,7 @@
   <form id="login-form">
     <div class="dialog-top"><h2>Yönetici girişi</h2><button type="button" class="close" data-close aria-label="Kapat">×</button></div>
     <p>Merkez veya il yönetici hesabınızla programı düzenleyin.</p>
-    <label>Kullanıcı adı<input name="username" autocomplete="username" required maxlength="100"></label>
+    <label>T.C. kimlik no<input name="username" autocomplete="username" inputmode="numeric" required maxlength="100"></label>
     <label>Parola<input name="password" type="password" autocomplete="current-password" required></label>
     <p class="error" role="alert"></p>
     <button class="button button-primary" type="submit">Giriş yap</button>
@@ -136,8 +153,8 @@
   <form id="user-form" class="user-form">
     <p class="eyebrow">Yeni hesap</p>
     <div class="form-row">
-      <label>Kullanıcı adı<input name="username" required maxlength="32" autocomplete="off" placeholder="konya" pattern="[a-z0-9][a-z0-9._\-]{2,31}"><small>Küçük harf, rakam ve . - _</small></label>
-      <label>Yetki alanı<select name="city"></select></label>
+      <label>T.C. kimlik no<input name="username" required minlength="11" maxlength="11" autocomplete="off" inputmode="numeric" placeholder="11 haneli numara" pattern="[1-9][0-9]{10}"><small>Kişi bu numarayla giriş yapar</small></label>
+      <label>Sorumlu olduğu il<select name="city"></select><small>Merkez yöneticisi 81 ilin tamamını yönetir</small></label>
     </div>
     <label>Parola
       <span class="password-row"><input name="password" type="text" required minlength="12" maxlength="200" autocomplete="off" placeholder="en az 12 karakter"><button type="button" id="generate-password" class="button button-secondary">Parola üret</button></span>
@@ -148,27 +165,85 @@
   </form>
 </dialog>
 
+<dialog id="report-dialog">
+  <form id="report-form">
+    <div class="dialog-top"><h2>Faaliyet raporu</h2><button type="button" class="close" data-close aria-label="Kapat">×</button></div>
+    <p>Seçtiğiniz dönemdeki etkinlikler, soldaki süzgeçler (kapsam / il, çalışma grubu, tür) uygulanarak indirilir.</p>
+    <div class="preset-row" id="report-presets"></div>
+    <label>Ay seç <small>isteğe bağlı — başlangıç ve bitişi o aya ayarlar</small><input name="month" type="month" min="2000-01" max="2099-12"></label>
+    <div class="form-row">
+      <label>Başlangıç tarihi<input name="from" type="date" min="2000-01-01" max="2099-12-31" required></label>
+      <label>Bitiş tarihi<input name="to" type="date" min="2000-01-01" max="2099-12-31" required></label>
+    </div>
+    <fieldset class="choice">
+      <legend>Dosya biçimi</legend>
+      <div class="choice-cards">
+        <label class="choice-card"><input type="radio" name="format" value="docx" required checked> <span>Word (.docx)</span></label>
+        <label class="choice-card"><input type="radio" name="format" value="xlsx" required> <span>Excel (.xlsx)</span></label>
+      </div>
+    </fieldset>
+    <p class="error" role="alert"></p>
+    <button class="button button-primary" type="submit">İndir</button>
+  </form>
+</dialog>
+
 <dialog id="event-dialog">
   <form id="event-form">
     <div class="dialog-top"><h2 id="form-title">Etkinlik ekle</h2><button type="button" class="close" data-close aria-label="Kapat">×</button></div>
     <input name="id" type="hidden"><input name="updated" type="hidden">
     <label>Etkinlik adı<input name="title" required maxlength="160" placeholder="GençTek Konya Yapay Zekâ tanışma toplantısı"></label>
-    <div class="form-row">
-      <label>İl<select name="city" required></select></label>
-      <label>Çalışma grubu<select name="theme" required></select></label>
-    </div>
-    <div class="form-row">
-      <label>Etkinlik türü<select name="category" required></select></label>
-      <label>Durum<select name="status" required></select></label>
-    </div>
-    <label class="check"><input name="all_day" type="checkbox"> Tüm gün süren etkinlik (saat girilmez)</label>
+    <fieldset class="choice">
+      <legend>Etkinlik türü</legend>
+      <div class="choice-cards" id="kind-cards"></div>
+    </fieldset>
+    <fieldset class="choice" id="subtypes-field" hidden>
+      <legend><span id="subtypes-legend">Alt türler</span> <small>birden fazla seçilebilir</small></legend>
+      <div class="check-grid" id="subtype-checks"></div>
+    </fieldset>
+    <fieldset class="choice">
+      <legend>Kapsam</legend>
+      <div class="choice-cards" id="scope-cards"></div>
+    </fieldset>
+    <label id="city-field" hidden>İl<select name="city"></select></label>
+    <fieldset class="choice" id="cities-field" hidden>
+      <legend>Ortak iller <small id="cities-count"></small></legend>
+      <input id="cities-search" type="search" placeholder="İl ara…" aria-label="Ortak illerde ara">
+      <div class="check-grid check-scroll" id="city-checks"></div>
+    </fieldset>
+    <label>Durum<select name="status" required></select></label>
     <div class="form-row">
       <label>Başlangıç <small>Türkiye saati</small><input name="start" type="datetime-local" min="2000-01-01T00:00" max="2099-12-31T23:59" required></label>
       <label>Bitiş <small>Türkiye saati</small><input name="end" type="datetime-local" min="2000-01-01T00:00" max="2099-12-31T23:59" required></label>
     </div>
-    <label>Konum / çevrim içi platform<input name="location" required maxlength="250" placeholder="Bilim Merkezi konferans salonu veya Zoom"></label>
-    <label>Katılım bağlantısı <small>isteğe bağlı</small><input name="url" type="url" maxlength="500" placeholder="https://..."></label>
-    <label>Açıklama<textarea name="description" rows="4" maxlength="5000" placeholder="Kimler katılabilir, program akışı, iletişim…"></textarea></label>
+    <fieldset class="choice">
+      <legend>Katılım biçimi</legend>
+      <div class="choice-cards">
+        <label class="choice-card"><input type="radio" name="online" value="0" required> <span>Yüz yüze</span></label>
+        <label class="choice-card"><input type="radio" name="online" value="1" required> <span>Çevrim içi</span></label>
+      </div>
+    </fieldset>
+    <label id="location-field">Yer<input name="location" maxlength="250" placeholder="Bilim Merkezi konferans salonu"></label>
+    <fieldset class="choice">
+      <legend>Kaç kişi katıldı? <small id="people-total"></small></legend>
+      <div class="form-row form-row-3">
+        <label>Öğrenci<input name="students" type="number" min="0" max="1000000" step="1" inputmode="numeric" placeholder="0"></label>
+        <label>Öğretmen<input name="teachers" type="number" min="0" max="1000000" step="1" inputmode="numeric" placeholder="0"></label>
+        <label>Diğer<input name="others" type="number" min="0" max="1000000" step="1" inputmode="numeric" placeholder="0"></label>
+      </div>
+    </fieldset>
+    <fieldset class="choice">
+      <legend>Paydaş / İşbirliği Yapılan Kurum <small>birden fazla eklenebilir</small></legend>
+      <div id="partner-rows" class="partner-rows"></div>
+      <button type="button" id="partner-add" class="button button-secondary inline-add">+ Paydaş ekle</button>
+    </fieldset>
+    <label>Amaç<textarea name="purpose" rows="3" maxlength="2000" placeholder="Etkinliğin amacı…"></textarea></label>
+    <label>Açıklama / kapsam<textarea name="description" rows="4" maxlength="5000" placeholder="Kimler katıldı, program akışı, içerik…"></textarea></label>
+    <fieldset class="choice">
+      <legend>Fotoğraflar <small id="photo-count">0 / 5</small></legend>
+      <div id="photo-list" class="photo-list"></div>
+      <button type="button" id="photo-add" class="button button-secondary inline-add">+ Fotoğraf ekle</button>
+      <input id="photo-input" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden>
+    </fieldset>
     <p class="error" role="alert"></p>
     <button class="button button-primary" type="submit">Etkinliği kaydet</button>
   </form>
@@ -180,11 +255,15 @@
   <p id="detail-status" class="status-badge" hidden></p>
   <dl class="detail-list">
     <div><dt>Tarih</dt><dd id="detail-time"></dd></div>
+    <div><dt>Kapsam</dt><dd id="detail-scope"></dd></div>
     <div><dt>Yer</dt><dd id="detail-place"></dd></div>
-    <div><dt>Çalışma grubu</dt><dd id="detail-theme"></dd></div>
+    <div><dt id="detail-sub-label">Alt türler</dt><dd id="detail-subtypes"></dd></div>
+    <div id="detail-counts-row"><dt>Katılımcılar</dt><dd id="detail-counts"></dd></div>
   </dl>
-  <p id="detail-description"></p>
-  <p><a id="detail-url" class="text-link" hidden rel="noopener noreferrer" target="_blank">Katılım bağlantısını aç ↗</a></p>
+  <div id="detail-purpose-block" class="detail-block"><h3>Amaç</h3><p id="detail-purpose"></p></div>
+  <div class="detail-block"><h3>Açıklama / kapsam</h3><p id="detail-description"></p></div>
+  <div id="detail-partners-block" class="detail-block"><h3>Paydaş / İşbirliği Yapılan Kurum</h3><ul id="detail-partners"></ul></div>
+  <div id="detail-photos" class="photo-grid" hidden></div>
   <div class="detail-actions">
     <a id="export" class="button button-primary" href="#">Takvimime ekle (.ics)</a>
     <button id="edit" class="button button-secondary" hidden>Düzenle</button>

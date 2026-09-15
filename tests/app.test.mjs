@@ -7,7 +7,8 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer } from 'node:net';
 import { inflateRawSync, crc32 } from 'node:zlib';
-import { hashPassword, cities, places, themes, categories, validateEvent, NATIONWIDE, ValidationError } from '../lib/data.mjs';
+import { hashPassword, cities, places, groups, categories, subtypes, validateEvent, validFilters, filterSql, NATIONWIDE, INTERNATIONAL, GROUP_KIND, ValidationError } from '../lib/data.mjs';
+import { validTc, maskUsername } from '../lib/users.mjs';
 import { openDb } from '../lib/db.mjs';
 import { buildIcs } from '../lib/ics.mjs';
 
@@ -32,24 +33,95 @@ function unzip(buffer) {
 }
 
 const merkez = { city: null };
-const sample = { title: 'Yapay zekâ tanışma toplantısı', city: 'Ankara', category: 'Tanışma toplantısı', theme: 'Yapay Zeka', start: '2026-09-16T09:00', end: '2026-09-17T11:00', location: 'Bilim merkezi', description: 'Deneme kaydı', status: 'Planlandı', url: 'https://genctek.eba.gov.tr/' };
+const sample = { title: 'Yapay zekâ tanışma toplantısı', scope: 'İl', city: 'Ankara', category: GROUP_KIND, subtypes: ['Yapay Zekâ'], start: '2026-09-16T09:00', end: '2026-09-17T11:00', online: false, location: 'Bilim merkezi', description: 'Deneme kaydı', status: 'Planlandı', students: 40, teachers: '3', others: '', purpose: 'Akranlarla tanışmak', partners: [{ person: 'Ayşe Yılmaz', org: 'Bilim Merkezi' }, { person: ' ', org: '' }] };
+const ortak = { ...sample, title: 'Ortak robotik atölyesi', scope: 'Ortak iller', cities: ['Manisa', 'İzmir'], start: '2026-10-05T10:00', end: '2026-10-05T12:00', online: true, location: '' };
 
 test('il, tema ve tür listeleri', () => {
   assert.equal(new Set(cities).size, 81);
-  assert.equal(places[0], NATIONWIDE);
-  assert.equal(places.length, 82);
-  assert.ok(themes.includes('Espor') && themes.includes('Genel'));
-  assert.ok(categories.includes('G2S sektör buluşması'));
+  assert.deepEqual(places.slice(0, 2), [INTERNATIONAL, NATIONWIDE]);
+  assert.equal(places.length, 83);
+  assert.ok(groups.includes('Espor') && !groups.includes('Genel'));
+  assert.equal(categories.length, 3);
+  for (const kind of categories) assert.ok(Array.isArray(subtypes[kind]), kind + ' alt seçenekleri');
+  assert.ok(subtypes['Temel GençTek etkinliği'].includes('Genç Gölge'));
+  assert.deepEqual(subtypes[GROUP_KIND], groups);
+});
+
+test('alt tür süzgeci', () => {
+  assert.ok(validFilters({ category: 'Temel GençTek etkinliği', subtype: 'Genç Gölge' }));
+  assert.ok(!validFilters({ subtype: 'Genç Gölge' }), 'tür seçilmeden alt tür olmaz');
+  assert.ok(!validFilters({ category: 'Temel GençTek etkinliği', subtype: 'Robotik' }), 'başka türün alt türü');
+  assert.ok(!validFilters({ category: GROUP_KIND, subtype: 'Robotik' }), 'çalışma grubu ayrı süzgeçte');
+  assert.ok(!validFilters({ theme: 'Engelsiz Bilişim' }), 'pasif grup süzülmez');
+  const { clauses, params } = filterSql({ category: 'Temel GençTek etkinliği', subtype: 'Genç Gölge' });
+  assert.deepEqual(clauses, ['category=?', 'subtypes LIKE ?']);
+  assert.deepEqual(params, ['Temel GençTek etkinliği', '%|Genç Gölge|%']);
+});
+
+test('T.C. kimlik numarası', () => {
+  assert.ok(validTc('10000000146'));
+  assert.ok(!validTc('10000000147'), '11. hane');
+  assert.ok(!validTc('10000000156'), '10. hane');
+  assert.ok(!validTc('01234567890'), 'sıfırla başlayamaz');
+  assert.ok(!validTc('1000000014'), '10 hane');
+  assert.equal(maskUsername('10000000146'), '100******46');
+  assert.equal(maskUsername('admin'), 'admin');
 });
 
 test('etkinlik doğrulama', () => {
-  assert.equal(validateEvent(sample, merkez).city, 'Ankara');
+  const event = validateEvent(sample, merkez);
+  assert.equal(event.city, 'Ankara');
+  assert.equal(event.cities, '|Ankara|');
+  assert.equal(event.subtypes, '|Yapay Zekâ|');
+  assert.equal(event.theme, 'Yapay Zekâ');
+  assert.deepEqual([event.students, event.teachers, event.others], [40, 3, 0]);
+  assert.equal(event.purpose, 'Akranlarla tanışmak');
+  assert.deepEqual(JSON.parse(event.partners), [{ person: 'Ayşe Yılmaz', org: 'Bilim Merkezi' }], 'boş paydaş satırı atılır');
+  assert.throws(() => validateEvent({ ...sample, partners: Array.from({ length: 21 }, (_, i) => ({ org: 'Kurum ' + i })) }, merkez), ValidationError, 'paydaş sınırı');
+  assert.throws(() => validateEvent({ ...sample, purpose: 'a'.repeat(2001) }, merkez), ValidationError);
   assert.throws(() => validateEvent({ ...sample, start: '2026-02-30T09:00' }, merkez), ValidationError);
   assert.throws(() => validateEvent({ ...sample, end: sample.start }, merkez), ValidationError);
-  assert.throws(() => validateEvent({ ...sample, theme: 'Olmayan grup' }, merkez), ValidationError);
+  assert.throws(() => validateEvent({ ...sample, subtypes: [] }, merkez), ValidationError, 'alt seçenek zorunlu');
+  assert.throws(() => validateEvent({ ...sample, subtypes: ['Olmayan grup'] }, merkez), ValidationError);
+  assert.throws(() => validateEvent({ ...sample, category: 'Temel GençTek etkinliği' }, merkez), ValidationError, 'grup, başka türün alt seçeneği olamaz');
+  assert.equal(validateEvent({ ...sample, category: 'Temel GençTek etkinliği', subtypes: ['Sahne Senin', 'Genç Gölge'] }, merkez).subtypes, '|Genç Gölge|Sahne Senin|', 'liste sırasıyla saklanır');
+  assert.equal(validateEvent({ ...sample, category: 'İl etkinliği', subtypes: [] }, merkez).theme, 'Genel', 'listesi boş türde alt seçenek istenmez');
+  assert.throws(() => validateEvent({ ...sample, category: 'İl etkinliği', subtypes: ['Atölye'] }, merkez), ValidationError, 'eski tür adı kabul edilmez');
   assert.throws(() => validateEvent({ ...sample, status: 'Belirsiz' }, merkez), ValidationError);
-  assert.throws(() => validateEvent({ ...sample, url: 'javascript:alert(1)' }, merkez), ValidationError);
+  assert.equal(validateEvent({ ...sample, status: 'Tamamlandı' }, merkez).status, 'Tamamlandı');
+  assert.throws(() => validateEvent({ ...sample, students: -1 }, merkez), ValidationError);
+  assert.throws(() => validateEvent({ ...sample, teachers: '2,5' }, merkez), ValidationError);
+  assert.throws(() => validateEvent({ ...sample, location: '' }, merkez), ValidationError, 'yüz yüzede yer zorunlu');
+  assert.equal(validateEvent({ ...sample, online: true, location: 'yok sayılır' }, merkez).location, '');
   assert.throws(() => validateEvent({ ...sample, start: '2026-01-01T09:00', end: '2030-01-01T09:00' }, merkez), ValidationError, 'süre sınırı');
+  const joint = validateEvent(ortak, merkez);
+  assert.equal(joint.city, 'İzmir, Manisa');
+  assert.equal(joint.cities, '|İzmir|Manisa|');
+  assert.throws(() => validateEvent({ ...ortak, cities: ['İzmir'] }, merkez), ValidationError, 'ortak etkinlikte en az iki il');
+  const national = validateEvent({ ...sample, scope: NATIONWIDE }, merkez);
+  assert.deepEqual([national.city, national.cities], [NATIONWIDE, '']);
+  assert.throws(() => validateEvent({ ...sample, scope: 'Türkiye geneli' }, merkez), ValidationError);
+});
+
+test('eski grup / tür adları açılışta yeni listelere uydurulur', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'takvim-ad-'));
+  try {
+    let db = await openDb({ url: '', dir });
+    await db.run('INSERT INTO users(username,password,city) VALUES(?,?,?)', ['admin', 'x', null]);
+    const insert = (title, category, subs, theme) => db.run(`INSERT INTO events(title,scope,city,cities,category,subtypes,theme,start,"end",location,description,owner,updated) VALUES(?,'İl','Konya','|Konya|',?,?,?,'2026-09-01T09:00','2026-09-01T10:00','Salon','',1,'t')`, [title, category, subs, theme]);
+    await insert('yeniden adlanan grup', GROUP_KIND, '|Yapay Zeka|Espor|', 'Yapay Zeka, Espor');
+    await insert('türü değişen', GROUP_KIND, '|Tek Maraton|', 'Tek Maraton');
+    await insert('karşılıksız', 'Temel GençTek etkinliği', '|Tanışma toplantısı|', 'Genel');
+    await insert('güncel', 'Temel GençTek etkinliği', '|Genç Gölge|', 'Genel');
+    await db.close();
+    for (let round = 0; round < 2; round++) { db = await openDb({ url: '', dir }); if (round === 0) await db.close(); }
+    const rows = Object.fromEntries((await db.all('SELECT title,category,subtypes,theme FROM events')).map(r => [r.title, [r.category, r.subtypes, r.theme]]));
+    await db.close();
+    assert.deepEqual(rows['yeniden adlanan grup'], [GROUP_KIND, '|Espor|Yapay Zekâ|', 'Espor, Yapay Zekâ']);
+    assert.deepEqual(rows['türü değişen'], ['Temel GençTek etkinliği', '|Tek Maraton / Eğitim Teknolojileri Fikir Maratonu|', 'Genel']);
+    assert.deepEqual(rows['karşılıksız'], ['Temel GençTek etkinliği', '||', 'Genel']);
+    assert.deepEqual(rows['güncel'], ['Temel GençTek etkinliği', '|Genç Gölge|', 'Genel']);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 test('tüm gün etkinliği bitişi ertesi günün 00:00ı olarak saklanır', () => {
@@ -59,21 +131,26 @@ test('tüm gün etkinliği bitişi ertesi günün 00:00ı olarak saklanır', () 
   assert.equal(event.all_day, 1);
 });
 
-test('il yöneticisi yalnızca kendi ilini planlar', () => {
-  const ilYoneticisi = { city: 'Ankara' };
-  assert.equal(validateEvent(sample, ilYoneticisi).city, 'Ankara');
-  assert.throws(() => validateEvent({ ...sample, city: 'İzmir' }, ilYoneticisi), ValidationError);
-  assert.throws(() => validateEvent({ ...sample, city: NATIONWIDE }, ilYoneticisi), ValidationError);
+test('il yöneticisi yalnızca kendi ilini içeren etkinlikleri planlar', () => {
+  const ilYoneticisi = { city: 'İzmir' };
+  assert.equal(validateEvent({ ...sample, city: 'İzmir' }, ilYoneticisi).city, 'İzmir');
+  assert.throws(() => validateEvent(sample, ilYoneticisi), ValidationError);
+  assert.throws(() => validateEvent({ ...sample, scope: NATIONWIDE }, ilYoneticisi), ValidationError);
+  assert.throws(() => validateEvent({ ...sample, scope: INTERNATIONAL }, ilYoneticisi), ValidationError);
+  assert.equal(validateEvent(ortak, ilYoneticisi).scope, 'Ortak iller');
+  assert.throws(() => validateEvent({ ...ortak, cities: ['Manisa', 'Aydın'] }, ilYoneticisi), ValidationError);
 });
 
 test('ICS çıktısı', () => {
-  const text = buildIcs([{ ...sample, id: 7, updated: '2026-09-01T10:00:00.000Z', all_day: 0 }], { host: 'takvim.test' });
+  const text = buildIcs([{ ...sample, subtypes: '|Yapay Zekâ|', id: 7, updated: '2026-09-01T10:00:00.000Z', all_day: 0 }], { host: 'takvim.test' });
   assert.match(text, /BEGIN:VEVENT/);
   assert.match(text, /UID:etkinlik-7@takvim\.test/);
   assert.match(text, /DTSTART:20260916T060000Z/); // 09:00 TR = 06:00 UTC
   assert.match(text, /STATUS:CONFIRMED/);
+  assert.match(text, /CATEGORIES:Çalışma grubu etkinliği/);
+  assert.doesNotMatch(text, /\r\nURL:/);
   assert.ok(text.split('\r\n').every(line => Buffer.byteLength(line) <= 75));
-  const allDay = buildIcs([{ ...sample, id: 8, updated: '2026-09-01T10:00:00.000Z', all_day: 1, start: '2026-09-16T00:00', end: '2026-09-19T00:00', status: 'İptal edildi' }], { host: 'takvim.test' });
+  const allDay = buildIcs([{ ...sample, subtypes: '|Yapay Zekâ|', id: 8, updated: '2026-09-01T10:00:00.000Z', all_day: 1, start: '2026-09-16T00:00', end: '2026-09-19T00:00', status: 'İptal edildi' }], { host: 'takvim.test' });
   assert.match(allDay, /DTSTART;VALUE=DATE:20260916/);
   assert.match(allDay, /DTEND;VALUE=DATE:20260919/);
   assert.match(allDay, /STATUS:CANCELLED/);
@@ -93,7 +170,7 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
       const { default: pg } = await import('pg');
       const client = new pg.Client({ connectionString: backend.url });
       await client.connect();
-      await client.query('DROP TABLE IF EXISTS sessions, events, users');
+      await client.query('DROP TABLE IF EXISTS photos, sessions, events, users');
       await client.end();
     }
     let db = await openDb({ url: backend.url || '', dir });
@@ -149,7 +226,27 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
     /* Aralık okuma ve sınırı */
     let records = await (await request('/api/events?from=2026-09-01&to=2026-10-01')).json();
     assert.equal(records.length, 1);
-    assert.equal(records[0].theme, 'Yapay Zeka');
+    assert.equal(records[0].theme, 'Yapay Zekâ');
+    assert.equal(records[0].scope, 'İl');
+    assert.equal(records[0].cities, '|Ankara|');
+    assert.equal(records[0].students, 40);
+    assert.equal(JSON.parse(records[0].partners)[0].org, 'Bilim Merkezi');
+
+    /* Fotoğraflar: en fazla 5, imzası denetlenir, görüntüleme herkese açık */
+    const upload = (bytes, cookieValue) => fetch(`${origin}/api/events/${id}/photos`, { method: 'POST', headers: { Origin: origin, 'Content-Type': 'image/jpeg', Cookie: cookieValue }, body: bytes });
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
+    assert.equal((await upload(jpeg, '')).status, 401);
+    assert.equal((await upload(Buffer.from('<svg onload=alert(1)>'), cookie)).status, 400, 'fotoğraf olmayan dosya reddedilir');
+    const photoIds = [];
+    for (let i = 0; i < 5; i++) { const response = await upload(jpeg, cookie); assert.equal(response.status, 201); photoIds.push((await response.json()).id); }
+    assert.equal((await upload(jpeg, cookie)).status, 400, 'altıncı fotoğraf reddedilir');
+    const photo = await request('/api/photos/' + photoIds[0]);
+    assert.equal(photo.status, 200);
+    assert.equal(photo.headers.get('content-type'), 'image/jpeg');
+    assert.deepEqual(Buffer.from(await photo.arrayBuffer()), jpeg);
+    assert.equal((await request(`/api/events/${id}/photos/${photoIds[4]}`, 'DELETE', null, cookie)).status, 200);
+    assert.deepEqual((await (await request(`/api/events/${id}/photos`)).json()).map(p => p.id), photoIds.slice(0, 4));
+    assert.equal('url' in records[0], false, 'katılım bağlantısı artık dönmez');
     assert.equal(records[0].end, sample.end, '"end" sütunu iki arka uçta da aynı adla döner');
     assert.equal(records[0].all_day, 0);
     assert.equal((await request('/api/events?from=2026-01-01&to=2026-12-31')).status, 400, 'aralık sınırı');
@@ -172,13 +269,19 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
     const ilCookie = await login('izmir', 'izmir-password-123');
     assert.equal((await request('/api/events', 'POST', { ...sample, city: 'Ankara' }, ilCookie)).status, 400);
     assert.equal((await request('/api/events', 'POST', { ...sample, city: 'İzmir' }, ilCookie)).status, 201);
+    assert.equal((await request('/api/events', 'POST', { ...ortak, cities: ['Manisa', 'Aydın'] }, ilCookie)).status, 400, 'kendi ilini içermeyen ortak etkinlik reddedilir');
+    assert.equal((await request('/api/events', 'POST', ortak, ilCookie)).status, 201, 'kendi ilini içeren ortak etkinlik açılır');
+    assert.equal((await (await request('/api/events?tum=1')).json()).length, 3, 'sayaçlar için tüm kayıtlar');
 
-    /* Abonelik akışı */
+    /* Abonelik akışı: ortak il etkinliği her ilinin akışında görünür */
     const feed = await request('/takvim.ics?il=' + encodeURIComponent('İzmir'));
     assert.equal(feed.status, 200);
     assert.match(feed.headers.get('content-type'), /text\/calendar/);
     const feedText = await feed.text();
-    assert.equal(feedText.match(/BEGIN:VEVENT/g).length, 2);
+    assert.equal(feedText.match(/BEGIN:VEVENT/g).length, 3);
+    assert.equal((await (await request('/takvim.ics?il=Manisa')).text()).match(/BEGIN:VEVENT/g).length, 1);
+    assert.equal((await (await request('/takvim.ics?tema=' + encodeURIComponent('Yapay Zekâ'))).text()).match(/BEGIN:VEVENT/g).length, 3);
+    assert.equal((await request('/takvim.ics?tema=Genel')).status, 400);
     assert.equal((await request('/takvim.ics?il=Yok')).status, 400);
     assert.match(await (await request('/takvim.ics?id=' + id)).text(), /BEGIN:VEVENT/);
 
@@ -199,6 +302,30 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
     assert.match(documentXml, /Deneme kaydı/, 'ayrıntılar bölümü');
     assert.match(documentXml, /w:orient="landscape"/);
     assert.equal(documentXml.match(/<w:tr>/g).length > 2, true);
+    assert.doesNotMatch(documentXml, />SAAT</, 'saat sütunu yok');
+    assert.match(documentXml, /Durum: 0 tamamlandı, 2 tamamlanmadı \(2 planlandı, 0 ertelendi, 0 iptal edildi\)/);
+    for (const header of ['ETKİNLİK TÜRÜ', 'ALT TÜR', 'ÇALIŞMA GRUPLARI']) assert.ok(documentXml.includes('>' + header + '<'), header + ' sütunu');
+
+    /* Dönem seçimi ve Excel */
+    assert.equal((await request('/api/rapor?bas=2026-10-01&bit=2026-09-01', 'GET', null, cookie)).status, 400, 'ters dönem');
+    assert.equal((await request('/api/rapor?bas=2026-09-01&bit=2030-09-01', 'GET', null, cookie)).status, 400, 'dönem sınırı');
+    assert.equal((await request('/api/rapor?bas=2026-09-01&bit=2026-09-30&bicim=pdf', 'GET', null, cookie)).status, 400);
+    const donem = await request('/api/rapor?bas=2026-09-15&bit=2026-10-20', 'GET', null, cookie);
+    assert.match(donem.headers.get('content-disposition'), /genctek-faaliyet-2026-09-15_2026-10-20\.docx/);
+    const donemXml = unzip(Buffer.from(await donem.arrayBuffer()))['word/document.xml'].toString('utf8');
+    assert.match(donemXml, /15 Eylül 2026 – 20 Ekim 2026/);
+    assert.match(donemXml, /Ortak robotik atölyesi/, 'dönemdeki sonraki ayın etkinliği de girer');
+    const excel = await request('/api/rapor?bas=2026-09-01&bit=2026-10-31&bicim=xlsx', 'GET', null, cookie);
+    assert.equal(excel.status, 200);
+    assert.match(excel.headers.get('content-type'), /spreadsheetml\.sheet/);
+    assert.match(excel.headers.get('content-disposition'), /genctek-faaliyet-2026-09_2026-10\.xlsx/);
+    const sheetParts = unzip(Buffer.from(await excel.arrayBuffer()));
+    for (const part of ['[Content_Types].xml', 'xl/workbook.xml', 'xl/styles.xml', 'xl/_rels/workbook.xml.rels']) assert.ok(sheetParts[part], part + ' pakette');
+    const sheetXml = sheetParts['xl/worksheets/sheet1.xml'].toString('utf8');
+    for (const text of ['Etkinlik türü', 'Tamamlandı mı', 'Hayır', 'Alt tür', 'Çalışma grupları', 'Yapay zekâ tanışma toplantısı', 'Çalışma grubu etkinliği', 'Yapay Zekâ', 'Ortak robotik atölyesi', 'Ayşe Yılmaz – Bilim Merkezi'])
+      assert.ok(sheetXml.includes(text), text + ' Excel\'de');
+    assert.match(sheetXml, /<v>46281<\/v>/, '16 Eylül 2026 gerçek Excel tarihi');
+    assert.doesNotMatch(sheetXml, /09:00/, 'saat yazılmaz');
     const bos = unzip(Buffer.from(await (await request('/api/rapor?ay=2026-09&il=' + encodeURIComponent('Ankara'), 'GET', null, cookie)).arrayBuffer()));
     assert.match(bos['word/document.xml'].toString('utf8'), /seçilen süzgeçlerle eşleşen kayıtlı etkinlik bulunmuyor/);
     const ekim = unzip(Buffer.from(await (await request('/api/rapor?ay=2026-10', 'GET', null, cookie)).arrayBuffer()));
@@ -213,27 +340,29 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
 
     /* Yumuşak silme: takvimden kalkar, satır durur */
     assert.equal((await request('/api/events/' + id, 'DELETE', null, cookie)).status, 200);
+    assert.equal((await request('/api/photos/' + photoIds[0])).status, 404, 'silinen etkinliğin fotoğrafı gösterilmez');
     records = await (await request('/api/events?from=2026-09-01&to=2026-10-01')).json();
     assert.equal(records.length, 1, 'yalnızca il yöneticisinin kaydı kalır');
     db = await openDb({ url: backend.url || '', dir });
-    assert.equal((await db.get('SELECT CAST(count(*) AS INTEGER) AS n FROM events')).n, 2);
+    assert.equal((await db.get('SELECT CAST(count(*) AS INTEGER) AS n FROM events')).n, 3);
     assert.equal((await db.get('SELECT CAST(count(*) AS INTEGER) AS n FROM events WHERE deleted_at IS NOT NULL')).n, 1);
     await db.close();
 
     /* Kullanıcı yönetimi: yalnızca merkez yöneticisi */
     assert.equal((await request('/api/users', 'GET', null, ilCookie)).status, 403, 'il yöneticisi hesapları göremez');
-    assert.equal((await request('/api/users', 'POST', { username: 'yeni', city: 'Bursa', password: 'yeni-parola-123' }, ilCookie)).status, 403);
+    assert.equal((await request('/api/users', 'POST', { username: '10000000146', city: 'Bursa', password: 'yeni-parola-123' }, ilCookie)).status, 403);
     const people = await (await request('/api/users', 'GET', null, cookie)).json();
     assert.equal(people.length, 2);
     assert.ok(people.find(p => p.username === 'admin').self);
     assert.equal(typeof people[0].events, 'number', 'sayımlar sayı olarak döner');
-    assert.equal((await request('/api/users', 'POST', { username: 'BÜYÜK', city: '', password: 'yeni-parola-123' }, cookie)).status, 400, 'kullanıcı adı kuralı');
-    assert.equal((await request('/api/users', 'POST', { username: 'bursa', city: 'Bursa', password: 'kisa' }, cookie)).status, 400, 'parola kuralı');
-    assert.equal((await request('/api/users', 'POST', { username: 'admin', city: '', password: 'yeni-parola-123' }, cookie)).status, 400, 'aynı ad iki kez');
-    const yeni = await request('/api/users', 'POST', { username: 'bursa', city: 'Bursa', password: 'bursa-parola-123' }, cookie);
+    assert.equal((await request('/api/users', 'POST', { username: 'bursa', city: 'Bursa', password: 'yeni-parola-123' }, cookie)).status, 400, 'kullanıcı adı T.C. kimlik no olmalı');
+    assert.equal((await request('/api/users', 'POST', { username: '10000000147', city: 'Bursa', password: 'yeni-parola-123' }, cookie)).status, 400, 'T.C. denetim hanesi');
+    assert.equal((await request('/api/users', 'POST', { username: '10000000146', city: 'Bursa', password: 'kisa' }, cookie)).status, 400, 'parola kuralı');
+    const yeni = await request('/api/users', 'POST', { username: '10000000146', city: 'Bursa', password: 'bursa-parola-123' }, cookie);
     assert.equal(yeni.status, 201);
+    assert.equal((await request('/api/users', 'POST', { username: '10000000146', city: '', password: 'yeni-parola-123' }, cookie)).status, 400, 'aynı numara iki kez');
     const yeniId = (await yeni.json()).id;
-    const bursaCookie = await login('bursa', 'bursa-parola-123');
+    const bursaCookie = await login('10000000146', 'bursa-parola-123');
     assert.equal((await request('/api/events', 'POST', { ...sample, city: 'Bursa' }, bursaCookie)).status, 201);
 
     /* Parola atama açık oturumu kapatır */

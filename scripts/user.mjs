@@ -1,6 +1,6 @@
 import { ValidationError } from '../lib/data.mjs';
 import { openDb } from '../lib/db.mjs';
-import { listUsers, createUser, resetPassword, setCity, removeUser, checkUsername } from '../lib/users.mjs';
+import { listUsers, createUser, resetPassword, setCity, removeUser } from '../lib/users.mjs';
 
 /**
  * Yönetici hesaplarını sunucu üzerinden yönetir.
@@ -14,10 +14,12 @@ import { listUsers, createUser, resetPassword, setCity, removeUser, checkUsernam
  */
 const KULLANIM = `Kullanım:
   npm run user -- liste
-  npm run user -- ekle <kullanıcı> [il]     yeni hesap (il verilmezse merkez yöneticisi)
+  npm run user -- ekle <tc-kimlik-no> [il]  yeni hesap (il verilmezse merkez yöneticisi)
   npm run user -- parola <kullanıcı>        parolayı değiştirir, oturumlarını kapatır
   npm run user -- yetki <kullanıcı> [il]    yetki alanını değiştirir (il boşsa merkez)
   npm run user -- sil <kullanıcı>
+
+Kullanıcı adı T.C. kimlik numarasıdır; eski hesaplar (ör. admin) adıyla yönetilebilir.
 
 Parolayı USER_PASSWORD ortam değişkenine yazın (en az 12 karakter).`;
 
@@ -25,7 +27,8 @@ const [command, username, city, ...rest] = process.argv.slice(2);
 const db = await openDb();
 const bitir = async (message, code = 0) => { await db.close(); (code ? console.error : console.log)(message); process.exit(code); };
 const bul = async name => {
-  const row = await db.get('SELECT id FROM users WHERE username=?', [checkUsername(name)]);
+  /* Arama T.C. kuralını uygulamaz: kuraldan önce açılmış "admin" gibi hesaplar da yönetilebilsin. */
+  const row = await db.get('SELECT id FROM users WHERE username=?', [String(name).trim()]);
   if (!row) throw new ValidationError('Böyle bir kullanıcı yok.');
   return row;
 };

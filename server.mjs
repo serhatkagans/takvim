@@ -1,15 +1,18 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { randomBytes, createHash } from 'node:crypto';
-import { cities, places, categories, themes, statuses, NATIONWIDE, verifyPassword, hashPassword, checkPassword, validateEvent, validDay, daysBetween, dayString, ValidationError, MAX_RANGE_DAYS, SEARCH_LIMIT, FEED_LIMIT, MIN_PASSWORD } from './lib/data.mjs';
+import { cities, places, scopes, categories, subtypes, groups, passiveGroups, statuses, NATIONWIDE, INTERNATIONAL, GROUP_KIND, listOf, validFilters, filterSql, photoType, MAX_PHOTOS, MAX_PHOTO_BYTES, verifyPassword, hashPassword, checkPassword, validateEvent, validDay, daysBetween, dayString, ValidationError, MAX_RANGE_DAYS, SEARCH_LIMIT, FEED_LIMIT, MIN_PASSWORD } from './lib/data.mjs';
 import { openDb } from './lib/db.mjs';
-import { listUsers, createUser, resetPassword, setCity, removeUser } from './lib/users.mjs';
+import { listUsers, createUser, resetPassword, setCity, removeUser, maskUsername } from './lib/users.mjs';
 import { buildIcs } from './lib/ics.mjs';
-import { buildRapor } from './lib/rapor.mjs';
+import { buildRapor, periodInfo } from './lib/rapor.mjs';
+import { buildExcel } from './lib/excel.mjs';
 
 const db = await openDb();
 const logo = await readFile(new URL('./public/genctek.png', import.meta.url));
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const REPORT_DAYS = 1100;
 const dummyHash = hashPassword(randomBytes(24).toString('hex'));
 const port = Number(process.env.PORT || 3010);
 const origin = process.env.PUBLIC_ORIGIN || `http://localhost:${port}`;
@@ -24,7 +27,7 @@ const basePath = (process.env.BASE_PATH || '').replace(/\/+$/, '');
    edilebildiği için ancak açıkça güvenilen bir kurulumda dikkate alınır. */
 const trustProxy = process.env.TRUST_PROXY === 'true';
 const SESSION_HOURS = 8;
-const FIELDS = 'id,title,city,category,theme,start,"end",all_day,location,url,description,status,updated';
+const FIELDS = 'id,title,scope,city,cities,category,subtypes,theme,start,"end",all_day,online,location,purpose,description,status,students,teachers,others,partners,updated';
 
 const attempts = new Map();
 const digest = token => createHash('sha256').update(token).digest('hex');
@@ -67,12 +70,23 @@ function sameOrigin(req) {
 
 async function body(req) {
   let data = '';
-  for await (const part of req) { data += part; if (Buffer.byteLength(data) > 20000) throw new ValidationError('İstek çok büyük.'); }
+  for await (const part of req) { data += part; if (Buffer.byteLength(data) > 64000) throw new ValidationError('İstek çok büyük.'); }
   try {
     const parsed = JSON.parse(data);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error();
     return parsed;
   } catch { throw new ValidationError('Geçersiz istek.'); }
+}
+
+/** Fotoğraf yüklemesi: ham gövde, sınırı aşan istek okunmayı bitirmeden reddedilir. */
+async function rawBody(req, limit) {
+  const parts = []; let size = 0;
+  for await (const part of req) {
+    size += part.length;
+    if (size > limit) throw new ValidationError(`Fotoğraf en fazla ${Math.round(limit / 1048576)} MB olabilir.`);
+    parts.push(part);
+  }
+  return Buffer.concat(parts);
 }
 
 /**
@@ -99,7 +113,7 @@ const liveEvents = (where, params) => db.all(`SELECT ${FIELDS} FROM events WHERE
 const server = createServer(async (req, res) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'same-origin');
-  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
   try {
     const url = new URL(req.url, origin);
     const readOnly = ['GET', 'HEAD'].includes(req.method);
@@ -120,15 +134,12 @@ const server = createServer(async (req, res) => {
         if (!rows.length) return send(res, 404, { error: 'Etkinlik bulunamadı.' });
         name = rows[0].title;
       } else {
-        const city = url.searchParams.get('il') || '', category = url.searchParams.get('tur') || '', theme = url.searchParams.get('tema') || '';
-        if ((city && !places.includes(city)) || (category && !categories.includes(category)) || (theme && !themes.includes(theme))) return send(res, 400, { error: 'Geçersiz süzgeç.' });
+        const filters = { city: url.searchParams.get('il') || '', theme: url.searchParams.get('tema') || '', category: url.searchParams.get('tur') || '', subtype: url.searchParams.get('alt') || '' };
+        if (!validFilters(filters)) return send(res, 400, { error: 'Geçersiz süzgeç.' });
         const from = dayString(new Date(Date.now() - 90 * 86400000)), to = dayString(new Date(Date.now() + 400 * 86400000));
-        const clauses = ['start<?', '"end">?'], params = [to + 'T00:00', from + 'T00:00'];
-        if (city) { clauses.push('city=?'); params.push(city); }
-        if (category) { clauses.push('category=?'); params.push(category); }
-        if (theme) { clauses.push('theme=?'); params.push(theme); }
-        rows = (await liveEvents(clauses.join(' AND '), params)).slice(0, FEED_LIMIT);
-        name += [city && ` · ${city}`, theme && ` · ${theme}`, category && ` · ${category}`].filter(Boolean).join('');
+        const { clauses, params } = filterSql(filters);
+        rows = (await liveEvents(['start<?', '"end">?', ...clauses].join(' AND '), [to + 'T00:00', from + 'T00:00', ...params])).slice(0, FEED_LIMIT);
+        name += [filters.city, filters.theme, filters.category, filters.subtype].filter(Boolean).map(value => ` · ${value}`).join('');
       }
       const text = buildIcs(rows, { name, host: new URL(origin).host });
       res.writeHead(200, { 'Content-Type': 'text/calendar; charset=utf-8', 'Content-Disposition': `${id ? 'attachment' : 'inline'}; filename="genctek-takvim${id ? '-' + id : ''}.ics"` });
@@ -138,26 +149,32 @@ const server = createServer(async (req, res) => {
     if (url.pathname.startsWith('/api/')) res.setHeader('Cache-Control', 'no-store');
 
     if (url.pathname === '/api/meta' && req.method === 'GET')
-      return send(res, 200, { cities, places, categories, themes, statuses, nationwide: NATIONWIDE, maxRangeDays: MAX_RANGE_DAYS, minPassword: MIN_PASSWORD, user: user ? { username: user.username, city: user.city, central: !user.city } : null });
+      return send(res, 200, { cities, places, scopes, categories, subtypes, groups, passiveGroups, groupKind: GROUP_KIND, statuses, nationwide: NATIONWIDE, international: INTERNATIONAL, maxRangeDays: MAX_RANGE_DAYS, minPassword: MIN_PASSWORD, user: user ? { username: user.username, city: user.city, central: !user.city } : null });
 
-    /* ---- Aylık faaliyet programı (Word) — yalnızca yöneticiler ----------
+    /* ---- Faaliyet raporu (Word / Excel) — yalnızca yöneticiler ----------
+       Dönem `bas`–`bit` (iki gün dahil) ya da tek ay (`ay=2026-09`).
        Kenar çubuğundaki süzgeçler (il / çalışma grubu / tür) aynen uygulanır;
-       aya değen her etkinlik girer (ay sınırını aşan çok günlükler dahil). */
+       döneme değen her etkinlik girer (sınırı aşan çok günlükler dahil). */
     if (url.pathname === '/api/rapor' && req.method === 'GET') {
       if (!user) return send(res, 401, { error: 'Faaliyet raporunu indirmek için giriş yapın.' });
       const month = url.searchParams.get('ay') || '';
-      if (!/^20\d\d-(0[1-9]|1[0-2])$/.test(month)) return send(res, 400, { error: 'Geçerli bir ay seçin.' });
-      const filters = { city: url.searchParams.get('il') || '', theme: url.searchParams.get('tema') || '', category: url.searchParams.get('tur') || '' };
-      if ((filters.city && !places.includes(filters.city)) || (filters.theme && !themes.includes(filters.theme)) || (filters.category && !categories.includes(filters.category))) return send(res, 400, { error: 'Geçersiz süzgeç.' });
-      /* Date.UTC'nin ay dizini sıfırdan başlar: "09" → 9 → Ekim, yani sonraki ayın ilk günü. */
-      const next = dayString(new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 1)));
-      const clauses = ['start<?', '"end">?'], params = [next + 'T00:00', month + '-01T00:00'];
-      if (filters.city) { clauses.push('city=?'); params.push(filters.city); }
-      if (filters.theme) { clauses.push('theme=?'); params.push(filters.theme); }
-      if (filters.category) { clauses.push('category=?'); params.push(filters.category); }
-      const rows = await liveEvents(clauses.join(' AND '), params);
-      const file = buildRapor({ month, events: rows, filters, nationwide: NATIONWIDE, generatedBy: user.username, logo });
-      res.writeHead(200, { 'Content-Type': DOCX, 'Content-Disposition': `attachment; filename="genctek-faaliyet-${month}.docx"`, 'Content-Length': file.length });
+      let from = url.searchParams.get('bas') || '', to = url.searchParams.get('bit') || '';
+      if (month) {
+        if (!/^20\d\d-(0[1-9]|1[0-2])$/.test(month)) return send(res, 400, { error: 'Geçerli bir ay seçin.' });
+        /* Date.UTC'de ayın 0. günü önceki ayın son günüdür: "09" → 30 Eylül. */
+        from = month + '-01'; to = dayString(new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)));
+      }
+      if (!validDay(from) || !validDay(to) || to < from || from < '2000') return send(res, 400, { error: 'Geçerli bir başlangıç ve bitiş tarihi seçin.' });
+      if (daysBetween(from, to) > REPORT_DAYS) return send(res, 400, { error: 'Rapor dönemi en fazla 3 yıl olabilir.' });
+      const format = url.searchParams.get('bicim') || 'docx';
+      if (!['docx', 'xlsx'].includes(format)) return send(res, 400, { error: 'Geçersiz dosya biçimi.' });
+      const filters = { city: url.searchParams.get('il') || '', theme: url.searchParams.get('tema') || '', category: url.searchParams.get('tur') || '', subtype: url.searchParams.get('alt') || '' };
+      if (!validFilters(filters)) return send(res, 400, { error: 'Geçersiz süzgeç.' });
+      const next = dayString(new Date(Date.parse(to + 'T00:00:00Z') + 86400000));
+      const { clauses, params } = filterSql(filters);
+      const rows = await liveEvents(['start<?', '"end">?', ...clauses].join(' AND '), [next + 'T00:00', from + 'T00:00', ...params]);
+      const file = format === 'xlsx' ? buildExcel({ events: rows }) : buildRapor({ from, to, events: rows, filters, generatedBy: maskUsername(user.username), logo });
+      res.writeHead(200, { 'Content-Type': format === 'xlsx' ? XLSX : DOCX, 'Content-Disposition': `attachment; filename="genctek-faaliyet-${periodInfo(from, to).slug}.${format}"`, 'Content-Length': file.length });
       return res.end(file);
     }
 
@@ -228,17 +245,55 @@ const server = createServer(async (req, res) => {
 
     /* ---- Etkinlik okuma (herkese açık) ---------------------------------- */
     if (url.pathname === '/api/events' && req.method === 'GET') {
+      /* Üstteki sayaçların "tüm etkinlikler" toplamı için bütün canlı kayıtlar. */
+      if (url.searchParams.get('tum') === '1') return send(res, 200, await liveEvents('1=1', []));
       const query = (url.searchParams.get('q') || '').trim();
       if (query) {
         if (query.length < 2 || query.length > 100) return send(res, 400, { error: 'Arama için 2–100 karakter yazın.' });
         const pattern = '%' + query.replace(/[\\%_]/g, c => '\\' + c) + '%';
-        const rows = await db.all(`SELECT ${FIELDS} FROM events WHERE deleted_at IS NULL AND (title LIKE ? ESCAPE '\\' OR location LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\' OR city LIKE ? ESCAPE '\\' OR theme LIKE ? ESCAPE '\\') ORDER BY start DESC LIMIT ?`, [pattern, pattern, pattern, pattern, pattern, SEARCH_LIMIT]);
+        const rows = await db.all(`SELECT ${FIELDS} FROM events WHERE deleted_at IS NULL AND (title LIKE ? ESCAPE '\\' OR location LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\' OR city LIKE ? ESCAPE '\\' OR theme LIKE ? ESCAPE '\\' OR subtypes LIKE ? ESCAPE '\\' OR purpose LIKE ? ESCAPE '\\' OR partners LIKE ? ESCAPE '\\') ORDER BY start DESC LIMIT ?`, [pattern, pattern, pattern, pattern, pattern, pattern, pattern, pattern, SEARCH_LIMIT]);
         return send(res, 200, rows);
       }
       const from = url.searchParams.get('from'), to = url.searchParams.get('to');
       if (!validDay(from) || !validDay(to) || from >= to) return send(res, 400, { error: 'Geçerli bir tarih aralığı gerekir.' });
       if (daysBetween(from, to) > MAX_RANGE_DAYS) return send(res, 400, { error: `Tarih aralığı en fazla ${MAX_RANGE_DAYS} gün olabilir.` });
       return send(res, 200, await liveEvents('start<? AND "end">?', [to + 'T00:00', from + 'T00:00']));
+    }
+
+    /* ---- Fotoğraflar (etkinlik başına en fazla MAX_PHOTOS) ---------------
+       Görüntüleme herkese açık; ekleme ve silme etkinliği düzenleme yetkisiyle
+       aynı. Silinmiş (arşivdeki) etkinliğin fotoğrafı gösterilmez. */
+    const photoFile = url.pathname.match(/^\/api\/photos\/(\d{1,9})$/);
+    if (photoFile && readOnly) {
+      const photo = await db.get('SELECT p.type,p.data FROM photos p JOIN events e ON e.id=p.event_id WHERE p.id=? AND e.deleted_at IS NULL', [Number(photoFile[1])]);
+      if (!photo) return send(res, 404, { error: 'Fotoğraf bulunamadı.' });
+      const data = Buffer.from(photo.data);
+      /* Fotoğraf kimliği içerikle birlikte değişmediği için uzun önbellek güvenli. */
+      res.writeHead(200, { 'Content-Type': photo.type, 'Content-Length': data.length, 'Cache-Control': 'public, max-age=604800, immutable' });
+      return res.end(req.method === 'HEAD' ? undefined : data);
+    }
+    const photoPath = url.pathname.match(/^\/api\/events\/(\d{1,9})\/photos(?:\/(\d{1,9}))?$/);
+    if (photoPath) {
+      const eventId = Number(photoPath[1]), photoId = Number(photoPath[2]);
+      const target = await db.get('SELECT cities FROM events WHERE id=? AND deleted_at IS NULL', [eventId]);
+      if (!target) return send(res, 404, { error: 'Etkinlik bulunamadı.' });
+      if (req.method === 'GET' && !photoId) return send(res, 200, await db.all('SELECT id FROM photos WHERE event_id=? ORDER BY id', [eventId]));
+      if (!user) return send(res, 401, { error: 'Önce giriş yapın.' });
+      if (user.city && !listOf(target.cities).includes(user.city)) return send(res, 403, { error: 'Bu etkinlik için yetkiniz yok.' });
+      if (req.method === 'POST' && !photoId) {
+        const data = await rawBody(req, MAX_PHOTO_BYTES);
+        const type = photoType(data);
+        if (!type) throw new ValidationError('Yalnızca JPEG, PNG veya WebP fotoğraf yüklenebilir.');
+        if ((await db.get('SELECT CAST(count(*) AS INTEGER) AS n FROM photos WHERE event_id=?', [eventId])).n >= MAX_PHOTOS)
+          throw new ValidationError(`Bir etkinliğe en fazla ${MAX_PHOTOS} fotoğraf eklenebilir.`);
+        const row = await db.get('INSERT INTO photos(event_id,type,data,created) VALUES(?,?,?,?) RETURNING id', [eventId, type, data, new Date().toISOString()]);
+        return send(res, 201, { id: Number(row.id) });
+      }
+      if (req.method === 'DELETE' && photoId) {
+        if (!await db.run('DELETE FROM photos WHERE id=? AND event_id=?', [photoId, eventId])) return send(res, 404, { error: 'Fotoğraf bulunamadı.' });
+        return send(res, 200, { ok: true });
+      }
+      return send(res, 405, { error: 'Geçersiz işlem.' });
     }
 
     /* ---- Etkinlik yazma (yönetici) -------------------------------------- */
@@ -250,9 +305,10 @@ const server = createServer(async (req, res) => {
       const now = new Date().toISOString();
       let previous;
       if (id) {
-        previous = await db.get('SELECT city,updated FROM events WHERE id=? AND deleted_at IS NULL', [id]);
+        previous = await db.get('SELECT cities,updated FROM events WHERE id=? AND deleted_at IS NULL', [id]);
         if (!previous) return send(res, 404, { error: 'Etkinlik bulunamadı.' });
-        if (user.city && previous.city !== user.city) return send(res, 403, { error: 'Bu il için yetkiniz yok.' });
+        /* İl yöneticisi kendi ilini içeren il / ortak il etkinliklerini yönetir. */
+        if (user.city && !listOf(previous.cities).includes(user.city)) return send(res, 403, { error: 'Bu etkinlik için yetkiniz yok.' });
       }
       if (req.method === 'DELETE') {
         /* Kalıcı silme yerine işaretleme: yanlışlıkla silinen bir etkinlik
@@ -263,17 +319,17 @@ const server = createServer(async (req, res) => {
       const data = await body(req);
       if (id && typeof data.updated !== 'string') throw new ValidationError('Sürüm bilgisi eksik; sayfayı yenileyin.');
       const e = validateEvent(data, user);
-      const values = [e.title, e.city, e.category, e.theme, e.start, e.end, e.all_day, e.location, e.url, e.description, e.status];
+      const values = [e.title, e.scope, e.city, e.cities, e.category, e.subtypes, e.theme, e.start, e.end, e.all_day, e.online, e.location, e.purpose, e.description, e.status, e.students, e.teachers, e.others, e.partners];
       if (id) {
         /* Eşzamanlı düzenleme denetimi: istemci okuduğu sürümü geri gönderir,
            arada başkası kaydettiyse değişiklik sessizce ezilmez. Sürüm koşulu
            UPDATE'in içinde: ayrı bir okuma-sonra-yazma, iki eşzamanlı istekte
            ikisini de geçirirdi. */
-        const changed = await db.run('UPDATE events SET title=?,city=?,category=?,theme=?,start=?,"end"=?,all_day=?,location=?,url=?,description=?,status=?,updated=?,updated_by=? WHERE id=? AND updated=? AND deleted_at IS NULL', [...values, now, user.id, id, data.updated]);
+        const changed = await db.run('UPDATE events SET title=?,scope=?,city=?,cities=?,category=?,subtypes=?,theme=?,start=?,"end"=?,all_day=?,online=?,location=?,purpose=?,description=?,status=?,students=?,teachers=?,others=?,partners=?,updated=?,updated_by=? WHERE id=? AND updated=? AND deleted_at IS NULL', [...values, now, user.id, id, data.updated]);
         if (!changed) return send(res, 409, { error: 'Bu etkinliği siz açtıktan sonra başka bir yönetici güncelledi. Sayfayı yenileyip değişikliğinizi tekrar girin.' });
         return send(res, 200, { id, updated: now });
       }
-      const row = await db.get('INSERT INTO events(title,city,category,theme,start,"end",all_day,location,url,description,status,owner,updated,updated_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id', [...values, user.id, now, user.id]);
+      const row = await db.get('INSERT INTO events(title,scope,city,cities,category,subtypes,theme,start,"end",all_day,online,location,purpose,description,status,students,teachers,others,partners,owner,updated,updated_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id', [...values, user.id, now, user.id]);
       return send(res, 201, { id: Number(row.id), updated: now });
     }
 
