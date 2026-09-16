@@ -20,7 +20,9 @@ Sunucuda hangi sürümün çalıştığı: `ssh genctek 'cat /opt/genctektakvim/
   sayfası açıktır. **Abonelik akışı (`/takvim.ics`) bilerek açık bırakıldı**:
   Google Takvim ve Outlook oturum çerezi gönderemez, kapatılsaydı mevcut tüm
   abonelikler bozulurdu. Oturum düşünce istemci kendiliğinden giriş sayfasına
-  döner. Giriş sayfasının betiği ayrı dosyadadır (`public/giris.js`), çünkü
+  döner; "Çıkış yap" da sayfayı yenileyip giriş ekranına götürür (önceden
+  takvim ekranda kalmaya devam ediyordu). Giriş sayfasının betiği ayrı
+  dosyadadır (`public/giris.js`), çünkü
   `Content-Security-Policy` satır içi betiği engeller (`script-src 'self'`);
   form ayrıca `method="post"` ile tanımlıdır, böylece betik çalışmasa bile
   parola adres satırına yazılmaz.

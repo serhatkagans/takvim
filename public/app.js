@@ -645,7 +645,8 @@ $('#users-button').onclick = async () => {
 $('#login-button').onclick = () => { $('#login-form .error').textContent = ''; $('#login-dialog').showModal(); };
 $('#password-button').onclick = () => { $('#password-form').reset(); $('#password-form .error').textContent = ''; $('#password-dialog').showModal(); };
 $('#logout-button').onclick = async () => {
-  try { await api('api/logout', { method: 'POST' }); await identity(); render(); }
+  /* Takvim oturumsuz görünmez: çıkışta sayfa yenilenir, giriş ekranı gelir. */
+  try { await api('api/logout', { method: 'POST' }); location.reload(); }
   catch (error) { $('#status').textContent = error.message; }
 };
 
