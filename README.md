@@ -1,20 +1,22 @@
 # GençTek Etkinlik Takvimi
 
-Türkiye'nin 81 ilini kapsayan, herkese açık aylık takvim ve liste görünümü. GençTek çalışma gruplarının tanışma toplantıları, atölyeleri, maratonları ve sektör buluşmaları tek programda toplanır. Etkinlikleri **merkez yöneticisi** ve yetkilendirilmiş **il yöneticileri** ekler; ziyaretçiler süzer, arar ve kendi takvimlerine abone olur. Örnek veya uydurma etkinlik eklenmez.
+Türkiye'nin 81 ilini kapsayan, herkese açık takvim (ay veya seçilen tarih aralığı) ve liste görünümü. GençTek çalışma gruplarının tanışma toplantıları, atölyeleri, maratonları ve sektör buluşmaları tek programda toplanır. Etkinlikleri **merkez yöneticisi** ve yetkilendirilmiş **il yöneticileri** ekler; ziyaretçiler süzer, arar ve kendi takvimlerine abone olur. Örnek veya uydurma etkinlik eklenmez.
 
 Arayüz GençTek portalının marka paletini kullanır: Pantone 7621 C (`#c4161c`), Neutral Black U (`#414042`), Cool Gray 8 U (`#939598`) ve beyaz; üstte ve altta kırmızı bant, arada beyaz içerik.
 
 ## Özellikler
 
-- **Ay ve liste görünümü**, kapsam-il / çalışma grubu / etkinlik türü süzgeçleri. Takvimde planlanan etkinlikler gri, tamamlananlar kırmızıdır.
-- **Sayaç kartları**: tamamlanan, planlanan / devam eden, il, çalışma grubu, öğrenci, öğretmen ve paydaş sayıları. Varsayılan olarak tüm etkinlikleri, "Yalnızca görüntülenen ay" seçiliyse o ayı sayar.
-- **Etkinlik türü** (Temel GençTek / İl / Çalışma grubu etkinliği) ve türün alt seçenekleri (çoklu seçim; çalışma grubu etkinliğinde çalışma grupları). Alt seçenek listeleri `lib/data.mjs` içindedir.
+- **Ay ve liste görünümü**, kapsam-il / çalışma grubu / etkinlik türü / alt tür / durum (planlandı – tamamlandı) süzgeçleri. Takvimde planlanan etkinlikler gri, tamamlananlar kırmızıdır.
+- **Tarih aralığı**: takvim denetimlerinden başlangıç–bitiş seçilince aralık kaç ay sürüyorsa o kadar ay alt alta çizilir (en fazla 24 ay); sayaçlar, liste ve rapor penceresi de aralığa uyar.
+- **Sayaç kartları**: tamamlanan, planlanan / devam eden, il, çalışma grubu, öğrenci, öğretmen ve paydaş sayıları. Varsayılan olarak tüm etkinlikleri, "Yalnızca görüntülenen dönem" seçiliyse görüntülenen ayı / aralığı sayar. Bir karta tıklayınca döküm açılır (tür dökümünde hiç etkinliği olmayan türler de 0 ile listelenir); bir değere tıklamak hem süzer hem altında o seçimin en yeni 10 etkinliğini gösterir. Kartların başındaki "Filtreleri temizle" tüm süzgeçleri kaldırır. İl yöneticisine ayrıca "Kendi girdiğim etkinlikler" kutusu görünür: takvimi, listeyi ve sayaçları kendi eklediği kayıtlara indirir — yetkisini değiştirmez, kendi ilini içeren tüm etkinlikleri yönetmeye devam eder.
+- **Etkinlik türü** (Temel GençTek / İl / Çalışma grubu etkinliği / Diğer) ve türün alt seçenekleri (çoklu seçim; çalışma grubu etkinliğinde çalışma grupları, "Diğer" ve İl etkinliğinde alt seçenek sorulmaz). Alt seçenek listeleri `lib/data.mjs` içindedir.
 - **Kapsam**: uluslararası, ulusal, il veya ortak iller (birden çok il).
 - **Katılım biçimi**: yüz yüze (yer bilgisi zorunlu) veya çevrim içi; isteğe bağlı öğrenci / öğretmen / diğer katılımcı sayıları ve "+ Paydaş ekle" ile kişi – kurum paydaş listesi.
 - **Amaç** ve **açıklama / kapsam** metinleri; etkinlik başına en fazla **5 fotoğraf** (tarayıcıda 1600 px'e küçültülüp veritabanındaki `photos` tablosunda saklanır, yedeğe girer).
-- **Genel arama**: "Tüm takvimde ara" seçiliyken arama görüntülenen aya değil, tüm kayıtlara uygulanır.
-- **Takvim aboneliği**: `/takvim.ics` adresi Google Takvim, Outlook ve telefon takvimlerinin abone olabileceği bir akıştır; `?il=`, `?tema=`, `?tur=` süzgeçlerini kabul eder. `?id=` ile tek etkinlik indirilir. Program değiştikçe abone takvimler kendiliğinden güncellenir.
-- **Tüm gün etkinlikleri**, çok günlük etkinlikler ve **etkinlik durumu** (Planlandı / Tamamlandı / Ertelendi / İptal edildi — iptal, ICS'te `STATUS:CANCELLED` olarak gider).
+- **Genel arama**: en az iki karakter yazılınca arama görüntülenen döneme değil tüm kayıtlara uygulanır; eşleşenler takvimin altında tarihleriyle listelenir.
+- **Takvim aboneliği**: `/takvim.ics` adresi Google Takvim, Outlook ve telefon takvimlerinin abone olabileceği bir akıştır; `?il=`, `?tema=`, `?tur=`, `?alt=`, `?durum=` süzgeçlerini kabul eder. `?id=` ile tek etkinlik indirilir. Program değiştikçe abone takvimler kendiliğinden güncellenir.
+- **Gün bazlı etkinlikler**: formda saat sorulmaz, başlangıç ve bitiş günü seçilir (bitiş günü dahildir); çok günlük etkinlikler kapsadıkları her günde görünür. **Etkinlik durumu**: Planlandı / Tamamlandı / Ertelendi / İptal edildi — iptal, ICS'te `STATUS:CANCELLED` olarak gider.
+- **Faaliyet raporu** (yalnızca yöneticiler): seçilen dönemin etkinliklerini, kenar çubuğundaki süzgeçlerle **Word (.docx)** veya **Excel (.xlsx)** olarak indirir. Üçüncü seçenek **Fotoğraflar (.zip)**: dönemin etkinliklerine yüklenmiş fotoğrafları, her etkinlik kendi klasöründe ve dosya adı da etkinliği taşıyacak biçimde paketler; arşivin kökündeki `icindekiler.txt` klasörleri etkinlikle eşleştirir. Uç: `GET /api/rapor?bas=&bit=&bicim=docx|xlsx|zip` (süzgeçler: `il`, `tema`, `tur`, `alt`, `durum`).
 - **İki yetki düzeyi**: merkez yöneticisi her kapsamı, il yöneticisi yalnızca kendi ilini içeren il ve ortak il etkinliklerini planlar.
 - **Eşzamanlı düzenleme koruması**: iki yönetici aynı etkinliği açarsa ikinci kayıt sessizce ezilmez, çakışma bildirilir.
 - **Yumuşak silme**: silinen etkinlik takvimden kalkar, veritabanı satırı arşivde kalır.
@@ -95,9 +97,9 @@ Her yedek için farklı hedef klasör kullanın; veritabanı ile varsa `-wal` ve
 
 ## Doğrulama ve kapsam
 
-`npm test`: il/tema listeleri, tarih ve tüm gün doğrulaması, il yöneticisi yetkisi, ICS üretimi (satır katlama ve UTC dönüşümü dâhil), herkese açık okuma, kaynak (CSRF) kontrolü, CRUD, sürüm çakışması, arama, abonelik akışı, parola değiştirme, yumuşak silme, disk kalıcılığı, T.C. kimlik no doğrulaması ve alt tür süzgeci.
+`npm test`: il/tema listeleri, tarih ve tüm gün doğrulaması, il yöneticisi yetkisi, ICS üretimi (satır katlama ve UTC dönüşümü dâhil), herkese açık okuma, kaynak (CSRF) kontrolü, CRUD, sürüm çakışması, arama, abonelik akışı, parola değiştirme, yumuşak silme, disk kalıcılığı, T.C. kimlik no doğrulaması, alt tür ve durum süzgeci, fotoğraf arşivi (.zip).
 
-Saatler Türkiye saati (UTC+3) olarak girilir ve gösterilir; Türkiye'de yaz saati uygulaması olmadığı için ICS çıktısında saatler doğrudan UTC'ye çevrilir. Çok günlük etkinlikler kapsadıkları tüm günlerde görünür. Bir etkinlik en fazla 366 gün sürebilir; tek istekte en çok 100 günlük aralık okunur, arama en çok 200 sonuç döndürür.
+Etkinlikler gün bazlıdır: saat girilmez, kayıtlar tüm gün olarak saklanır ve ICS çıktısına `VALUE=DATE` ile yazılır. Saat taşıyan eski kayıtlar ilk açılışta tam güne çevrilir (`lib/db.mjs`, `allDayOnly`): gün korunur, saat bilgisi düşer. Çok günlük etkinlikler kapsadıkları tüm günlerde görünür. Bir etkinlik en fazla 366 gün sürebilir; tek istekte en çok 100 günlük aralık okunur, arama en çok 200 sonuç döndürür.
 
 Parolalar scrypt ile özetlenir, oturumlar HttpOnly/SameSite=Strict çerez kullanır ve 8 saat sonra düşer; yazma istekleri `Origin` başlığıyla doğrulanır. İlk sürüm tek VPS / tek uygulama örneği içindir.
 

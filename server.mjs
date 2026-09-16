@@ -7,11 +7,13 @@ import { listUsers, createUser, resetPassword, setCity, removeUser, maskUsername
 import { buildIcs } from './lib/ics.mjs';
 import { buildRapor, periodInfo } from './lib/rapor.mjs';
 import { buildExcel } from './lib/excel.mjs';
+import { zip } from './lib/zip.mjs';
 
 const db = await openDb();
 const logo = await readFile(new URL('./public/genctek.png', import.meta.url));
 const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+const ZIP = 'application/zip';
 const REPORT_DAYS = 1100;
 const dummyHash = hashPassword(randomBytes(24).toString('hex'));
 const port = Number(process.env.PORT || 3010);
@@ -27,12 +29,51 @@ const basePath = (process.env.BASE_PATH || '').replace(/\/+$/, '');
    edilebildiği için ancak açıkça güvenilen bir kurulumda dikkate alınır. */
 const trustProxy = process.env.TRUST_PROXY === 'true';
 const SESSION_HOURS = 8;
-const FIELDS = 'id,title,scope,city,cities,category,subtypes,theme,start,"end",all_day,online,location,purpose,description,status,students,teachers,others,partners,updated';
+const FIELDS = 'id,title,scope,city,cities,category,subtypes,theme,start,"end",all_day,online,location,purpose,description,status,students,teachers,others,partners,owner,updated';
 
 const attempts = new Map();
 const digest = token => createHash('sha256').update(token).digest('hex');
 const send = (res, status, value) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(value)); };
 const cookie = (token, age) => `session=${token}; HttpOnly; SameSite=Strict; Path=${basePath || '/'}; Max-Age=${age}${secure ? '; Secure' : ''}`;
+
+/* Fotoğraf arşivi (rapor penceresindeki "Fotoğraflar (.zip)"): her etkinlik
+   kendi klasöründe, dosyalar yükleme sırasına göre numaralı. Fotoğraflar
+   diskte değil `photos` tablosunda durduğu için doğrudan oradan paketlenir. */
+const ARCHIVE_PHOTOS = 500;
+const EXTENSIONS = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+/* Windows ve macOS'ta dosya adında kullanılamayan karakterler ayıklanır. */
+const safeName = value => String(value).replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || 'etkinlik';
+
+async function photoArchive(events) {
+  if (!events.length) return [];
+  const ids = events.map(e => e.id);
+  const rows = await db.all(`SELECT event_id,type,data FROM photos WHERE event_id IN (${ids.map(() => '?').join(',')}) ORDER BY event_id,id`, ids);
+  /* Aynı gün aynı adı taşıyan iki etkinlik olursa klasörler karışmasın. */
+  const folders = new Map(), used = new Set();
+  for (const e of events) {
+    const base = `${e.start.slice(0, 10)} ${safeName(e.title)}`;
+    const name = used.has(base) ? `${base} (${e.id})` : base;
+    used.add(name);
+    folders.set(e.id, name);
+  }
+  /* Dosya adı da etkinliği taşır: arşiv düz açılsa ya da tek fotoğraf başka
+     bir klasöre sürüklense bile hangi etkinliğe ait olduğu kaybolmaz. */
+  const counts = new Map();
+  const entries = rows.slice(0, ARCHIVE_PHOTOS).map(row => {
+    const folder = folders.get(row.event_id);
+    const index = (counts.get(row.event_id) || 0) + 1;
+    counts.set(row.event_id, index);
+    return { name: `${folder}/${folder} - ${index}.${EXTENSIONS[row.type] || 'jpg'}`, data: Buffer.from(row.data) };
+  });
+  if (!entries.length) return entries;
+  const index = events.filter(e => counts.get(e.id)).map(e => [
+    `Klasör : ${folders.get(e.id)}`, `Etkinlik: ${e.title}`, `Tarih : ${e.start.slice(0, 10)} – ${e.end.slice(0, 10)}`,
+    `Kapsam : ${e.city}`, `Tür : ${e.category}${listOf(e.subtypes).length ? ' – ' + listOf(e.subtypes).join(', ') : ''}`,
+    `Durum : ${e.status}`, `Fotoğraf: ${counts.get(e.id)}`,
+  ].join('\n')).join('\n\n');
+  entries.unshift({ name: 'icindekiler.txt', data: Buffer.from('﻿' + index + '\n', 'utf8') });
+  return entries;
+}
 
 /**
  * Vekil (Apache mod_proxy, nginx `$proxy_add_x_forwarded_for`) gördüğü adresi
@@ -134,12 +175,12 @@ const server = createServer(async (req, res) => {
         if (!rows.length) return send(res, 404, { error: 'Etkinlik bulunamadı.' });
         name = rows[0].title;
       } else {
-        const filters = { city: url.searchParams.get('il') || '', theme: url.searchParams.get('tema') || '', category: url.searchParams.get('tur') || '', subtype: url.searchParams.get('alt') || '' };
+        const filters = { city: url.searchParams.get('il') || '', theme: url.searchParams.get('tema') || '', category: url.searchParams.get('tur') || '', subtype: url.searchParams.get('alt') || '', status: url.searchParams.get('durum') || '' };
         if (!validFilters(filters)) return send(res, 400, { error: 'Geçersiz süzgeç.' });
         const from = dayString(new Date(Date.now() - 90 * 86400000)), to = dayString(new Date(Date.now() + 400 * 86400000));
         const { clauses, params } = filterSql(filters);
         rows = (await liveEvents(['start<?', '"end">?', ...clauses].join(' AND '), [to + 'T00:00', from + 'T00:00', ...params])).slice(0, FEED_LIMIT);
-        name += [filters.city, filters.theme, filters.category, filters.subtype].filter(Boolean).map(value => ` · ${value}`).join('');
+        name += [filters.city, filters.theme, filters.category, filters.subtype, filters.status].filter(Boolean).map(value => ` · ${value}`).join('');
       }
       const text = buildIcs(rows, { name, host: new URL(origin).host });
       res.writeHead(200, { 'Content-Type': 'text/calendar; charset=utf-8', 'Content-Disposition': `${id ? 'attachment' : 'inline'}; filename="genctek-takvim${id ? '-' + id : ''}.ics"` });
@@ -149,7 +190,7 @@ const server = createServer(async (req, res) => {
     if (url.pathname.startsWith('/api/')) res.setHeader('Cache-Control', 'no-store');
 
     if (url.pathname === '/api/meta' && req.method === 'GET')
-      return send(res, 200, { cities, places, scopes, categories, subtypes, groups, passiveGroups, groupKind: GROUP_KIND, statuses, nationwide: NATIONWIDE, international: INTERNATIONAL, maxRangeDays: MAX_RANGE_DAYS, minPassword: MIN_PASSWORD, user: user ? { username: user.username, city: user.city, central: !user.city } : null });
+      return send(res, 200, { cities, places, scopes, categories, subtypes, groups, passiveGroups, groupKind: GROUP_KIND, statuses, nationwide: NATIONWIDE, international: INTERNATIONAL, maxRangeDays: MAX_RANGE_DAYS, minPassword: MIN_PASSWORD, user: user ? { id: user.id, username: user.username, city: user.city, central: !user.city } : null });
 
     /* ---- Faaliyet raporu (Word / Excel) — yalnızca yöneticiler ----------
        Dönem `bas`–`bit` (iki gün dahil) ya da tek ay (`ay=2026-09`).
@@ -167,12 +208,19 @@ const server = createServer(async (req, res) => {
       if (!validDay(from) || !validDay(to) || to < from || from < '2000') return send(res, 400, { error: 'Geçerli bir başlangıç ve bitiş tarihi seçin.' });
       if (daysBetween(from, to) > REPORT_DAYS) return send(res, 400, { error: 'Rapor dönemi en fazla 3 yıl olabilir.' });
       const format = url.searchParams.get('bicim') || 'docx';
-      if (!['docx', 'xlsx'].includes(format)) return send(res, 400, { error: 'Geçersiz dosya biçimi.' });
-      const filters = { city: url.searchParams.get('il') || '', theme: url.searchParams.get('tema') || '', category: url.searchParams.get('tur') || '', subtype: url.searchParams.get('alt') || '' };
+      if (!['docx', 'xlsx', 'zip'].includes(format)) return send(res, 400, { error: 'Geçersiz dosya biçimi.' });
+      const filters = { city: url.searchParams.get('il') || '', theme: url.searchParams.get('tema') || '', category: url.searchParams.get('tur') || '', subtype: url.searchParams.get('alt') || '', status: url.searchParams.get('durum') || '' };
       if (!validFilters(filters)) return send(res, 400, { error: 'Geçersiz süzgeç.' });
       const next = dayString(new Date(Date.parse(to + 'T00:00:00Z') + 86400000));
       const { clauses, params } = filterSql(filters);
       const rows = await liveEvents(['start<?', '"end">?', ...clauses].join(' AND '), [next + 'T00:00', from + 'T00:00', ...params]);
+      if (format === 'zip') {
+        const entries = await photoArchive(rows);
+        if (!entries.length) return send(res, 400, { error: 'Seçilen dönemde fotoğraf yüklenmiş etkinlik yok.' });
+        const archive = zip(entries);
+        res.writeHead(200, { 'Content-Type': ZIP, 'Content-Disposition': `attachment; filename="genctek-fotograflar-${periodInfo(from, to).slug}.zip"`, 'Content-Length': archive.length });
+        return res.end(archive);
+      }
       const file = format === 'xlsx' ? buildExcel({ events: rows }) : buildRapor({ from, to, events: rows, filters, generatedBy: maskUsername(user.username), logo });
       res.writeHead(200, { 'Content-Type': format === 'xlsx' ? XLSX : DOCX, 'Content-Disposition': `attachment; filename="genctek-faaliyet-${periodInfo(from, to).slug}.${format}"`, 'Content-Length': file.length });
       return res.end(file);
@@ -245,19 +293,22 @@ const server = createServer(async (req, res) => {
 
     /* ---- Etkinlik okuma (herkese açık) ---------------------------------- */
     if (url.pathname === '/api/events' && req.method === 'GET') {
+      /* Kaydı kimin açtığı yalnızca yöneticileri ilgilendirir ("yalnızca benim
+         eklediklerim" süzgeci ve düzenleme düğmeleri); ziyaretçiye gitmez. */
+      const forViewer = rows => (user ? rows : rows.map(({ owner, ...rest }) => rest));
       /* Üstteki sayaçların "tüm etkinlikler" toplamı için bütün canlı kayıtlar. */
-      if (url.searchParams.get('tum') === '1') return send(res, 200, await liveEvents('1=1', []));
+      if (url.searchParams.get('tum') === '1') return send(res, 200, forViewer(await liveEvents('1=1', [])));
       const query = (url.searchParams.get('q') || '').trim();
       if (query) {
         if (query.length < 2 || query.length > 100) return send(res, 400, { error: 'Arama için 2–100 karakter yazın.' });
         const pattern = '%' + query.replace(/[\\%_]/g, c => '\\' + c) + '%';
         const rows = await db.all(`SELECT ${FIELDS} FROM events WHERE deleted_at IS NULL AND (title LIKE ? ESCAPE '\\' OR location LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\' OR city LIKE ? ESCAPE '\\' OR theme LIKE ? ESCAPE '\\' OR subtypes LIKE ? ESCAPE '\\' OR purpose LIKE ? ESCAPE '\\' OR partners LIKE ? ESCAPE '\\') ORDER BY start DESC LIMIT ?`, [pattern, pattern, pattern, pattern, pattern, pattern, pattern, pattern, SEARCH_LIMIT]);
-        return send(res, 200, rows);
+        return send(res, 200, forViewer(rows));
       }
       const from = url.searchParams.get('from'), to = url.searchParams.get('to');
       if (!validDay(from) || !validDay(to) || from >= to) return send(res, 400, { error: 'Geçerli bir tarih aralığı gerekir.' });
       if (daysBetween(from, to) > MAX_RANGE_DAYS) return send(res, 400, { error: `Tarih aralığı en fazla ${MAX_RANGE_DAYS} gün olabilir.` });
-      return send(res, 200, await liveEvents('start<? AND "end">?', [to + 'T00:00', from + 'T00:00']));
+      return send(res, 200, forViewer(await liveEvents('start<? AND "end">?', [to + 'T00:00', from + 'T00:00'])));
     }
 
     /* ---- Fotoğraflar (etkinlik başına en fazla MAX_PHOTOS) ---------------
@@ -307,7 +358,9 @@ const server = createServer(async (req, res) => {
       if (id) {
         previous = await db.get('SELECT cities,updated FROM events WHERE id=? AND deleted_at IS NULL', [id]);
         if (!previous) return send(res, 404, { error: 'Etkinlik bulunamadı.' });
-        /* İl yöneticisi kendi ilini içeren il / ortak il etkinliklerini yönetir. */
+        /* İl yöneticisi kendi ilini İÇEREN etkinlikleri yönetir — kaydı kimin
+           açtığına bakılmaz: koordinatör değişince ilin eski kayıtları
+           sahipsiz kalmasın. Kim eklediği yalnızca süzgeçte kullanılır. */
         if (user.city && !listOf(previous.cities).includes(user.city)) return send(res, 403, { error: 'Bu etkinlik için yetkiniz yok.' });
       }
       if (req.method === 'DELETE') {

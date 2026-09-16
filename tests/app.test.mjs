@@ -41,9 +41,10 @@ test('il, tema ve tür listeleri', () => {
   assert.deepEqual(places.slice(0, 2), [INTERNATIONAL, NATIONWIDE]);
   assert.equal(places.length, 83);
   assert.ok(groups.includes('Espor') && !groups.includes('Genel'));
-  assert.equal(categories.length, 3);
+  assert.equal(categories.length, 4);
   for (const kind of categories) assert.ok(Array.isArray(subtypes[kind]), kind + ' alt seçenekleri');
   assert.ok(subtypes['Temel GençTek etkinliği'].includes('Genç Gölge'));
+  assert.deepEqual(subtypes['Diğer'], [], '"Diğer" türünde alt tür sorulmaz');
   assert.deepEqual(subtypes[GROUP_KIND], groups);
 });
 
@@ -56,6 +57,12 @@ test('alt tür süzgeci', () => {
   const { clauses, params } = filterSql({ category: 'Temel GençTek etkinliği', subtype: 'Genç Gölge' });
   assert.deepEqual(clauses, ['category=?', 'subtypes LIKE ?']);
   assert.deepEqual(params, ['Temel GençTek etkinliği', '%|Genç Gölge|%']);
+});
+
+test('durum süzgeci', () => {
+  assert.ok(validFilters({ status: 'Tamamlandı' }));
+  assert.ok(!validFilters({ status: 'Bitti' }), 'listede olmayan durum');
+  assert.deepEqual(filterSql({ status: 'Ertelendi' }), { clauses: ['status=?'], params: ['Ertelendi'] });
 });
 
 test('T.C. kimlik numarası', () => {
@@ -121,6 +128,28 @@ test('eski grup / tür adları açılışta yeni listelere uydurulur', async () 
     assert.deepEqual(rows['türü değişen'], ['Temel GençTek etkinliği', '|Tek Maraton / Eğitim Teknolojileri Fikir Maratonu|', 'Genel']);
     assert.deepEqual(rows['karşılıksız'], ['Temel GençTek etkinliği', '||', 'Genel']);
     assert.deepEqual(rows['güncel'], ['Temel GençTek etkinliği', '|Genç Gölge|', 'Genel']);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('saat taşıyan eski kayıtlar açılışta tam güne çevrilir', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'takvim-saat-'));
+  try {
+    let db = await openDb({ url: '', dir });
+    await db.run('INSERT INTO users(username,password,city) VALUES(?,?,?)', ['admin', 'x', null]);
+    const insert = (title, start, end, allDay = 0) => db.run(`INSERT INTO events(title,scope,city,cities,category,subtypes,theme,start,"end",all_day,location,description,owner,updated) VALUES(?,'İl','Konya','|Konya|','Temel GençTek etkinliği','|Genç Gölge|','Genel',?,?,?,'Salon','',1,'t')`, [title, start, end, allDay]);
+    await insert('tek gün', '2026-09-01T09:00', '2026-09-01T17:00');
+    await insert('çok gün', '2026-09-01T09:00', '2026-09-03T13:00');
+    await insert('gece yarısı biten', '2026-09-01T09:00', '2026-09-02T00:00');
+    await insert('zaten tüm gün', '2026-09-10T00:00', '2026-09-12T00:00', 1);
+    await db.close();
+    /* İki kez açılır: dönüştürme yinelenince kayıt kaymamalı. */
+    for (let round = 0; round < 2; round++) { db = await openDb({ url: '', dir }); if (round === 0) await db.close(); }
+    const rows = Object.fromEntries((await db.all('SELECT title,start,"end",all_day FROM events')).map(r => [r.title, [r.start, r.end, Number(r.all_day)]]));
+    await db.close();
+    assert.deepEqual(rows['tek gün'], ['2026-09-01T00:00', '2026-09-02T00:00', 1]);
+    assert.deepEqual(rows['çok gün'], ['2026-09-01T00:00', '2026-09-04T00:00', 1]);
+    assert.deepEqual(rows['gece yarısı biten'], ['2026-09-01T00:00', '2026-09-02T00:00', 1], 'bitiş 00:00 ise gün eklenmez');
+    assert.deepEqual(rows['zaten tüm gün'], ['2026-09-10T00:00', '2026-09-12T00:00', 1], 'tüm gün kayıtlara dokunulmaz');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -247,6 +276,10 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
     assert.equal((await request(`/api/events/${id}/photos/${photoIds[4]}`, 'DELETE', null, cookie)).status, 200);
     assert.deepEqual((await (await request(`/api/events/${id}/photos`)).json()).map(p => p.id), photoIds.slice(0, 4));
     assert.equal('url' in records[0], false, 'katılım bağlantısı artık dönmez');
+    /* Kaydı kimin açtığı yalnızca yöneticiye gider ("kendi girdiğim etkinlikler" süzgeci). */
+    assert.equal('owner' in records[0], false, 'ziyaretçiye owner gönderilmez');
+    const sahipli = await (await request('/api/events?tum=1', 'GET', null, cookie)).json();
+    assert.ok(sahipli.length && sahipli.every(row => typeof row.owner === 'number'), 'yönetici owner alanını görür');
     assert.equal(records[0].end, sample.end, '"end" sütunu iki arka uçta da aynı adla döner');
     assert.equal(records[0].all_day, 0);
     assert.equal((await request('/api/events?from=2026-01-01&to=2026-12-31')).status, 400, 'aralık sınırı');
@@ -322,8 +355,21 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
     const sheetParts = unzip(Buffer.from(await excel.arrayBuffer()));
     for (const part of ['[Content_Types].xml', 'xl/workbook.xml', 'xl/styles.xml', 'xl/_rels/workbook.xml.rels']) assert.ok(sheetParts[part], part + ' pakette');
     const sheetXml = sheetParts['xl/worksheets/sheet1.xml'].toString('utf8');
-    for (const text of ['Etkinlik türü', 'Tamamlandı mı', 'Hayır', 'Alt tür', 'Çalışma grupları', 'Yapay zekâ tanışma toplantısı', 'Çalışma grubu etkinliği', 'Yapay Zekâ', 'Ortak robotik atölyesi', 'Ayşe Yılmaz – Bilim Merkezi'])
+    for (const text of ['Etkinlik türü', 'Tamamlandı mı', 'Hayır', 'İlişkili olduğu temel etkinlik', 'Çalışma grupları', 'Yapay zekâ tanışma toplantısı', 'Çalışma grubu etkinliği', 'Yapay Zekâ', 'Ortak robotik atölyesi', 'Ayşe Yılmaz – Bilim Merkezi'])
       assert.ok(sheetXml.includes(text), text + ' Excel\'de');
+    const foto = await request('/api/rapor?bas=2026-09-01&bit=2026-10-31&bicim=zip', 'GET', null, cookie);
+    assert.equal(foto.status, 200);
+    assert.equal(foto.headers.get('content-type'), 'application/zip');
+    assert.match(foto.headers.get('content-disposition'), /genctek-fotograflar-2026-09_2026-10\.zip/);
+    const fotoParts = unzip(Buffer.from(await foto.arrayBuffer()));
+    assert.ok(fotoParts['icindekiler.txt'], 'içindekiler listesi arşivde');
+    assert.match(fotoParts['icindekiler.txt'].toString('utf8'), /Yapay zekâ tanışma toplantısı/);
+    const fotoNames = Object.keys(fotoParts).filter(name => name.endsWith('.jpg'));
+    assert.equal(fotoNames.length, 4, 'silinen hariç dört fotoğraf arşivde');
+    /* Klasör de dosya adı da etkinliği taşır: hangi resim hangi etkinliğin, karışmaz. */
+    assert.ok(fotoNames.every(name => name.startsWith('2026-09-16 ') && name.includes('/2026-09-16 ')), fotoNames.join(', '));
+    assert.deepEqual(fotoParts[fotoNames[0]], jpeg);
+    assert.equal((await request('/api/rapor?bas=2027-01-01&bit=2027-01-31&bicim=zip', 'GET', null, cookie)).status, 400, 'fotoğrafsız dönem');
     assert.match(sheetXml, /<v>46281<\/v>/, '16 Eylül 2026 gerçek Excel tarihi');
     assert.doesNotMatch(sheetXml, /09:00/, 'saat yazılmaz');
     const bos = unzip(Buffer.from(await (await request('/api/rapor?ay=2026-09&il=' + encodeURIComponent('Ankara'), 'GET', null, cookie)).arrayBuffer()));

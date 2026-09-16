@@ -35,7 +35,9 @@
       <div class="hero-stats">
         <div class="stats-head">
           <p class="eyebrow" id="stat-caption">Tüm etkinlikler</p>
-          <label class="check stats-toggle"><input id="stat-month" type="checkbox"> Yalnızca görüntülenen ay</label>
+          <label class="check stats-toggle"><input id="stat-month" type="checkbox"> Yalnızca görüntülenen dönem</label>
+          <label class="check stats-toggle" id="mine-label" hidden><input id="mine" type="checkbox"> Kendi girdiğim etkinlikler</label>
+          <button type="button" id="stat-clear" class="text-link" disabled>Filtreleri temizle</button>
         </div>
         <button type="button" class="stat" data-stat="done" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-done">—</strong><span>Tamamlanan etkinlik ▾</span></button>
         <button type="button" class="stat" data-stat="upcoming" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-upcoming">—</strong><span>Planlanan / devam eden ▾</span></button>
@@ -45,7 +47,7 @@
         <button type="button" class="stat" data-stat="teachers" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-teachers">—</strong><span>Öğretmen ▾</span></button>
         <button type="button" class="stat" data-stat="stakeholders" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-stakeholders">—</strong><span>Paydaş / kurum ▾</span></button>
         <div id="stat-breakdown" class="stat-breakdown" hidden></div>
-        <small id="stat-note">Saatler Türkiye saatidir (UTC+3). Ayrıntı ve filtre için kutulara tıklayın.</small>
+        <small id="stat-note"></small>
       </div>
     </div>
   </section>
@@ -63,6 +65,8 @@
       <select id="category"></select>
       <label for="subtype" id="subtype-label">Etkinlik alt türü</label>
       <select id="subtype"></select>
+      <label for="event-status">Etkinlik durumu</label>
+      <select id="event-status"></select>
       <button id="clear" class="text-link">Filtreleri temizle ↗</button>
 
       <div class="aside-note">
@@ -97,6 +101,13 @@
           <select id="month-pick" aria-label="Ay"></select>
           <select id="year-pick" aria-label="Yıl"></select>
           <select id="city-pick" aria-label="Kapsam / il"></select>
+        </div>
+        <div class="range-pick">
+          <span>Tarih aralığı</span>
+          <input id="range-from" type="date" min="2000-01-01" max="2099-12-31" aria-label="Aralık başlangıcı">
+          <span aria-hidden="true">–</span>
+          <input id="range-to" type="date" min="2000-01-01" max="2099-12-31" aria-label="Aralık bitişi">
+          <button type="button" id="range-clear" class="text-link" hidden>Aralığı kaldır</button>
         </div>
         <div class="view-toggle">
           <button id="month-view" aria-pressed="true">Ay</button>
@@ -165,12 +176,24 @@
   </form>
 </dialog>
 
+<dialog id="reset-dialog">
+  <form id="reset-form">
+    <div class="dialog-top"><h2>Parola ver</h2><button type="button" class="close" data-close aria-label="Kapat">×</button></div>
+    <p id="reset-lede"></p>
+    <label>Yeni parola
+      <span class="password-row"><input name="password" type="text" required minlength="12" maxlength="200" autocomplete="off" placeholder="en az 12 karakter"><button type="button" id="reset-generate" class="button button-secondary">Parola üret</button></span>
+      <small>Hazır gelen parolayı kullanabilir, yenisini üretebilir veya kendiniz yazabilirsiniz. Parolayı kişiye siz iletirsiniz; sistem e-posta göndermez.</small>
+    </label>
+    <p class="error" role="alert"></p>
+    <button class="button button-primary" type="submit">Parolayı ata</button>
+    <button type="button" id="reset-copy" class="text-link">Parolayı kopyala</button>
+  </form>
+</dialog>
+
 <dialog id="report-dialog">
   <form id="report-form">
     <div class="dialog-top"><h2>Faaliyet raporu</h2><button type="button" class="close" data-close aria-label="Kapat">×</button></div>
-    <p>Seçtiğiniz dönemdeki etkinlikler, soldaki süzgeçler (kapsam / il, çalışma grubu, tür) uygulanarak indirilir.</p>
-    <div class="preset-row" id="report-presets"></div>
-    <label>Ay seç <small>isteğe bağlı — başlangıç ve bitişi o aya ayarlar</small><input name="month" type="month" min="2000-01" max="2099-12"></label>
+    <p>Seçtiğiniz dönemdeki etkinlikler, soldaki süzgeçler (kapsam / il, çalışma grubu, tür, durum) uygulanarak indirilir.</p>
     <div class="form-row">
       <label>Başlangıç tarihi<input name="from" type="date" min="2000-01-01" max="2099-12-31" required></label>
       <label>Bitiş tarihi<input name="to" type="date" min="2000-01-01" max="2099-12-31" required></label>
@@ -180,6 +203,7 @@
       <div class="choice-cards">
         <label class="choice-card"><input type="radio" name="format" value="docx" required checked> <span>Word (.docx)</span></label>
         <label class="choice-card"><input type="radio" name="format" value="xlsx" required> <span>Excel (.xlsx)</span></label>
+        <label class="choice-card"><input type="radio" name="format" value="zip" required> <span>Fotoğraflar (.zip)</span></label>
       </div>
     </fieldset>
     <p class="error" role="alert"></p>
@@ -212,8 +236,8 @@
     </fieldset>
     <label>Durum<select name="status" required></select></label>
     <div class="form-row">
-      <label>Başlangıç <small>Türkiye saati</small><input name="start" type="datetime-local" min="2000-01-01T00:00" max="2099-12-31T23:59" required></label>
-      <label>Bitiş <small>Türkiye saati</small><input name="end" type="datetime-local" min="2000-01-01T00:00" max="2099-12-31T23:59" required></label>
+      <label>Başlangıç günü<input name="start" type="date" min="2000-01-01" max="2099-12-31" required></label>
+      <label>Bitiş günü <small>bu gün dahildir</small><input name="end" type="date" min="2000-01-01" max="2099-12-31" required></label>
     </div>
     <fieldset class="choice">
       <legend>Katılım biçimi</legend>
@@ -232,7 +256,7 @@
       </div>
     </fieldset>
     <fieldset class="choice">
-      <legend>Paydaş / İşbirliği Yapılan Kurum <small>birden fazla eklenebilir</small></legend>
+      <legend>Paydaş / İşbirliği Yapılan Kurum / Kişi <small>birden fazla eklenebilir</small></legend>
       <div id="partner-rows" class="partner-rows"></div>
       <button type="button" id="partner-add" class="button button-secondary inline-add">+ Paydaş ekle</button>
     </fieldset>
@@ -262,7 +286,7 @@
   </dl>
   <div id="detail-purpose-block" class="detail-block"><h3>Amaç</h3><p id="detail-purpose"></p></div>
   <div class="detail-block"><h3>Açıklama / kapsam</h3><p id="detail-description"></p></div>
-  <div id="detail-partners-block" class="detail-block"><h3>Paydaş / İşbirliği Yapılan Kurum</h3><ul id="detail-partners"></ul></div>
+  <div id="detail-partners-block" class="detail-block"><h3>Paydaş / İşbirliği Yapılan Kurum / Kişi</h3><ul id="detail-partners"></ul></div>
   <div id="detail-photos" class="photo-grid" hidden></div>
   <div class="detail-actions">
     <a id="export" class="button button-primary" href="#">Takvimime ekle (.ics)</a>

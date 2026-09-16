@@ -77,9 +77,14 @@ p { margin-top: 0 }
 .hero-inner { display: grid; grid-template-columns: 1fr; gap: 28px; align-items: center }
 .hero-lede { font-size: 1.12rem; margin: 0 }
 .hero-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px }
-.stats-head { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; gap: 8px 16px; flex-wrap: wrap }
+/* Başlık solda, onay kutusu ile "Filtreleri temizle" sağda yan yana durur:
+   boşluğu başlık emer, yoksa üç öğede ortadaki ortaya kayar. */
+.stats-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap }
+.stats-head #stat-caption { margin-right: auto }
 .hero-stats .eyebrow { margin: 0; text-transform: capitalize }
 .stats-toggle { margin: 0; cursor: pointer }
+#stat-clear:disabled { opacity: .45; cursor: default }
+#stat-clear:disabled:hover { text-decoration: none }
 .hero-stats .stat { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 12px; padding: 16px; display: grid; text-align: left; box-shadow: var(--shadow-sm); cursor: pointer; transition: border-color 120ms, transform 120ms }
 .hero-stats .stat:hover { border-color: var(--color-brand); transform: translateY(-1px) }
 .hero-stats .stat[aria-expanded="true"] { border-color: var(--color-brand); box-shadow: 0 0 0 2px var(--color-brand) }
@@ -91,6 +96,16 @@ p { margin-top: 0 }
 .stat-pill:hover { border-color: var(--color-brand); color: var(--color-brand) }
 .stat-pill[aria-pressed="true"] { background: var(--color-brand); border-color: var(--color-brand); color: #fff }
 .stat-pill[aria-pressed="true"] b { color: #fff }
+.stat-events { margin-top: 12px; border-top: 1px solid var(--color-border) }
+.stat-events > p { margin: 10px 0 0 }
+.stat-events .agenda-item { grid-template-columns: 62px 1fr; gap: 12px; padding: 10px 2px }
+.stat-events .agenda-item:last-child { border-bottom: 0 }
+.stat-events .empty { padding: 20px 2px }
+.range-pick { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: .82rem; color: var(--color-text-muted) }
+.range-pick input { padding: 6px 8px; border: 1px solid var(--color-border-strong); border-radius: 8px; background: var(--color-surface); font: inherit }
+.grid-title { margin: 18px 24px 6px; font-size: 1rem; color: var(--color-text-strong) }
+.grid-title:first-child { margin-top: 0 }
+.grid-note { margin: 12px 24px; font-size: .82rem; color: var(--color-text-muted) }
 .hero-stats strong { font: 800 1.8rem/1 var(--font-display); color: var(--color-brand); font-variant-numeric: tabular-nums }
 .hero-stats span { font-size: .78rem; color: var(--color-text-muted); margin-top: 6px }
 .hero-stats small { grid-column: 1 / -1; font-size: .76rem; color: var(--color-text-muted) }
@@ -214,7 +229,6 @@ dialog .choice input[type="radio"], dialog .choice input[type="checkbox"] { widt
 .photo-grid img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; border: 1px solid var(--color-border) }
 /* Formdaki "+ ekle" düğmeleri, fotoğraf önizlemeleri ve paydaş satırları */
 .inline-add { justify-self: start; min-height: 38px; padding: 7px 14px; font-size: .85rem }
-.preset-row { display: flex; flex-wrap: wrap; gap: 8px }
 .partner-rows { display: grid; gap: 8px }
 .partner-rows:empty { display: none }
 .partner-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: center }

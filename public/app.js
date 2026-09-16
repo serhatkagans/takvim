@@ -6,8 +6,16 @@ const nowString = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Istanbul'
 const monthFormat = new Intl.DateTimeFormat('tr-TR', { month: 'long', year: 'numeric' });
 const dayFormat = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'long' });
 
+const rangeFormat = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
+
 let month = new Date(nowString + 'T12:00:00'); month.setDate(1);
 let meta, events = [], allEvents = [], onlyMonth = false, selected, mode = 'month', sequence = 0, openStat = null, expandedDay = null;
+/* Takvim ya tek ayı ya da seçilen tarih aralığını gösterir. Aralık seçiliyken
+   kaç ay sürüyorsa o kadar ay kutusu alt alta çizilir ve kayıtlar aydan aya
+   istenmek yerine tümü (allEvents) üzerinden süzülür. */
+let rangeFrom = '', rangeTo = '';
+const rangeOn = () => !!(rangeFrom && rangeTo && rangeFrom <= rangeTo);
+const MAX_RANGE_MONTHS = 24;
 
 const dateKey = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 const shiftDay = (key, days) => dateKey(new Date(new Date(key + 'T12:00:00').setDate(new Date(key + 'T12:00:00').getDate() + days)));
@@ -19,6 +27,12 @@ const subtypeLabel = e => listOf(e.subtypes).join(', ');
 const partnersOf = e => { try { const value = JSON.parse(e.partners || '[]'); return Array.isArray(value) ? value : []; } catch { return []; } };
 const partnerLabel = p => [p.person, p.org].filter(Boolean).join(' – ');
 const MAX_PHOTOS = 5, MAX_PARTNERS = 20, MAX_DAY_EVENTS = 3;
+/* Sayaç dökümünde bir değer seçilince altında listelenen en fazla etkinlik. */
+const MAX_STAT_EVENTS = 10;
+/* Kenar çubuğundaki süzgeç kutuları; "Filtreleri temizle" hepsini boşaltır. */
+/* Durum kutusunun kimliği '#event-status': '#status' sayfadaki durum mesajı satırıdır. */
+const FILTERS = ['#search', '#city', '#theme', '#category', '#subtype', '#event-status'];
+const anyFilter = () => FILTERS.some(selector => $(selector).value) || $('#mine').checked;
 /* Çok illi ortak etkinlik takvim kutucuğunu taşırmasın. */
 const placeLabel = e => (listOf(e.cities).length > 3 ? `${listOf(e.cities).length} il ortak` : e.city);
 
@@ -40,6 +54,9 @@ async function identity() {
   /* Kullanıcı yönetimi yalnızca merkez yöneticisinde: il koordinatörü başka
      hesapları göremez, sunucu da bu uçları ona kapatır. */
   $('#users-button').hidden = !user?.central;
+  /* "Kendi girdiğim etkinlikler" yalnızca il yöneticisinde anlamlıdır. */
+  $('#mine-label').hidden = !user || !!user.central;
+  if ($('#mine-label').hidden) $('#mine').checked = false;
   $('#who').hidden = !user;
   /* T.C. kimlik numarası ekranda maskelenir (123******01); eski adlar ("admin") büyük harfle başlar. */
   const shown = /^\d{11}$/.test(user?.username || '') ? user.username.slice(0, 3) + '******' + user.username.slice(9) : (user?.username || '').charAt(0).toLocaleUpperCase('tr-TR') + (user?.username || '').slice(1);
@@ -70,10 +87,19 @@ async function reload() {
 }
 
 /** Kayıtların kenar çubuğu süzgeçlerine ve arama metnine göre süzülmesi.
-    Ortak il etkinliği her ilinde, çok gruplu etkinlik her grubunda görünür. */
-function filtered(source = events) {
-  const query = $('#search').value.toLocaleLowerCase('tr-TR'), place = $('#city').value, theme = $('#theme').value, kind = $('#category').value, sub = $('#subtype').value;
+    Ortak il etkinliği her ilinde, çok gruplu etkinlik her grubunda görünür.
+    `skip` verilen süzgeç kutusu (ör. '#category') yok sayılır: sayaç dökümü
+    kendi süzgecini uygulamadan hesaplanır, böylece bir değer seçilince
+    diğerleri listeden kaybolmaz. Tür yok sayılırsa alt tür de yok sayılır. */
+function filtered(source = events, skip = '') {
+  const value = id => (id === skip ? '' : $(id).value);
+  const query = $('#search').value.toLocaleLowerCase('tr-TR'), place = value('#city'), theme = value('#theme'), kind = value('#category'), sub = kind ? value('#subtype') : '', state = value('#event-status');
+  /* "Yalnızca benim eklediklerim": kutu yalnızca il yöneticisinde görünür,
+     `owner` alanı da yalnızca giriş yapmış kullanıcıya gönderilir. */
+  const mine = $('#mine').checked && meta.user ? meta.user.id : null;
   return source.filter(e =>
+    (!mine || e.owner === mine) &&
+    (!state || e.status === state) &&
     (!place || (meta.scopes.includes(place) ? e.scope === place : listOf(e.cities).includes(place))) &&
     (!theme || (e.category === meta.groupKind && listOf(e.subtypes).includes(theme))) &&
     (!kind || e.category === kind) &&
@@ -94,14 +120,27 @@ function inMonth(event) {
   return event.start < dateKey(end) + 'T00:00' && event.end > dateKey(month) + 'T00:00';
 }
 
+const inRange = event => event.start < shiftDay(rangeTo, 1) + 'T00:00' && event.end > rangeFrom + 'T00:00';
+
+/** Görüntülenen dönemin (ay ya da tarih aralığı) süzgeçten geçmiş etkinlikleri. */
+const shownEvents = (skip = '') => (rangeOn() ? filtered(allEvents, skip).filter(inRange) : filtered(events, skip).filter(inMonth));
+
+/** Aralığın değdiği ayların ilk günleri; çok uzun aralıklar kırpılır. */
+function monthsInRange() {
+  const list = [], cursor = new Date(rangeFrom + 'T12:00:00'), last = new Date(rangeTo + 'T12:00:00');
+  cursor.setDate(1);
+  while (cursor <= last && list.length < MAX_RANGE_MONTHS) { list.push(new Date(cursor)); cursor.setMonth(cursor.getMonth() + 1); }
+  return list;
+}
+
 /** Tüm gün etkinliğin bitişi ertesi günün 00:00'ıdır; kullanıcıya son gün yazılır. */
 const lastDay = event => event.all_day ? shiftDay(event.end.slice(0, 10), -1) : event.end.slice(0, 10);
 
+/** Etkinlikler gün bazlıdır: saat gösterilmez, tek günse tek tarih yazılır. */
 function timeLabel(event) {
   const start = event.start.slice(0, 10), end = lastDay(event);
-  if (event.all_day) return (start === end ? dayFormat.format(new Date(start + 'T12:00:00')) : `${dayFormat.format(new Date(start + 'T12:00:00'))} – ${dayFormat.format(new Date(end + 'T12:00:00'))}`) + ' · tüm gün';
-  const same = start === end;
-  return `${dayFormat.format(new Date(start + 'T12:00:00'))} ${event.start.slice(11)} → ${same ? '' : dayFormat.format(new Date(end + 'T12:00:00')) + ' '}${event.end.slice(11)} (Türkiye saati)`;
+  const day = key => dayFormat.format(new Date(key + 'T12:00:00'));
+  return start === end ? day(start) : `${day(start)} – ${day(end)}`;
 }
 
 function feedUrl() {
@@ -110,6 +149,7 @@ function feedUrl() {
   if ($('#theme').value) params.set('tema', $('#theme').value);
   if ($('#category').value) params.set('tur', $('#category').value);
   if ($('#subtype').value) params.set('alt', $('#subtype').value);
+  if ($('#event-status').value) params.set('durum', $('#event-status').value);
   /* Göreli çözülür: uygulama alt dizinde (/genctektakvim/) de çalışır. */
   return new URL('takvim.ics', location.href).href + (params.size ? '?' + params : '');
 }
@@ -130,21 +170,25 @@ function renderSubtypeFilter() {
 
 function render() {
   if (meta) renderSubtypeFilter();
-  $('#month-title').textContent = monthFormat.format(month);
-  const list = filtered();
-  const current = list.filter(inMonth);
-  $('#count').textContent = `Bu ay ${current.length} etkinlik`;
+  const ranged = rangeOn();
+  $('#range-clear').hidden = !(rangeFrom || rangeTo);
+  $('#month-title').textContent = ranged ? `${rangeFormat.format(new Date(rangeFrom + 'T12:00:00'))} – ${rangeFormat.format(new Date(rangeTo + 'T12:00:00'))}` : monthFormat.format(month);
+  const list = ranged ? filtered(allEvents) : filtered();
+  const current = shownEvents();
+  $('#count').textContent = `${ranged ? 'Seçilen aralıkta' : 'Bu ay'} ${current.length} etkinlik`;
   /* Sayaçlar varsayılan olarak tüm kayıtları, "Yalnızca görüntülenen ay"
      seçiliyse o ayı anlatır; başlık hangisi olduğunu yazar. Ulusal /
      uluslararası etkinlik bir ile bağlı olmadığı için il sayısına katılmaz.
      Süzgeçler ve arama metni her durumda uygulanır. */
   const counted = onlyMonth ? current : filtered(allEvents);
-  $('#stat-caption').textContent = onlyMonth ? monthFormat.format(month) : 'Tüm etkinlikler';
+  $('#stat-caption').textContent = onlyMonth ? $('#month-title').textContent : 'Tüm etkinlikler';
   $('#stat-month').checked = onlyMonth;
+  /* Süzgeç yokken düğme durur ama pasiftir: kartların orada da görünsün. */
+  $('#stat-clear').disabled = !anyFilter();
   for (const [key, stat] of Object.entries(statFilters)) $('#stat-' + key).textContent = statTotal(stat, counted);
   const wide = counted.filter(e => !e.cities).length;
-  $('#stat-note').textContent = (wide ? `İl sayısına ${wide} ulusal / uluslararası etkinlik katılmaz. ` : '') + 'Saatler Türkiye saatidir (UTC+3). Ayrıntı ve süzme için kutulara tıklayın.';
-  renderBreakdown(counted);
+  $('#stat-note').textContent = wide ? `İl sayısına ${wide} ulusal / uluslararası etkinlik katılmaz.` : '';
+  renderBreakdown();
   $('#report').title = 'Seçeceğiniz dönemin etkinliklerini, seçili süzgeçlerle Word veya Excel olarak indirir';
   $('#feed-url').value = feedUrl();
   $('#feed-open').href = feedUrl();
@@ -157,21 +201,13 @@ function render() {
   $('#month-pick').value = String(month.getMonth());
   $('#year-pick').innerHTML = Array.from({ length: 11 }, (_, i) => year - 5 + i).map(y => `<option${y === year ? ' selected' : ''}>${y}</option>`).join('');
   $('#city-pick').value = $('#city').value;
+  /* Aralık seçiliyken ay gezinmesi anlamsızdır. */
+  document.querySelector('.nav').hidden = ranged;
+  $('#month-pick').hidden = $('#year-pick').hidden = ranged;
 
-  const { from } = bounds();
-  let html = '<div class="week">' + ['PZT', 'SAL', 'ÇAR', 'PER', 'CUM', 'CMT', 'PAZ'].map(x => `<span>${x}</span>`).join('') + '</div><div class="grid">';
-  for (let i = 0; i < 42; i++) {
-    const day = new Date(from); day.setDate(day.getDate() + i);
-    const key = dateKey(day), next = shiftDay(key, 1);
-    const dayEvents = list.filter(e => e.start < next + 'T00:00' && e.end > key + 'T00:00');
-    /* Bir günde en fazla MAX_DAY_EVENTS kutucuk; fazlası "+N daha" ile açılır. */
-    const extra = dayEvents.length - MAX_DAY_EVENTS, expanded = expandedDay === key;
-    html += `<div class="day ${day.getMonth() !== month.getMonth() ? 'outside' : ''} ${key === nowString ? 'is-today' : ''}"><span class="day-number">${day.getDate()}</span>`
-      + (extra > 0 ? `<button type="button" class="day-more" data-day-more="${key}">${expanded ? 'Daha az göster' : `+${extra} etkinlik daha`}</button>` : '')
-      + (expanded ? dayEvents : dayEvents.slice(0, MAX_DAY_EVENTS)).map(e => `<button class="event-chip ${statusClass(e.status)}" data-event="${e.id}" title="${escapeHtml([e.title, e.status, e.city, e.category, subtypeLabel(e)].join(' · '))}">${escapeHtml((!e.all_day && e.start.slice(0, 10) === key ? e.start.slice(11) + ' ' : '') + e.title)}<span>${escapeHtml(placeLabel(e) + (e.category === meta.groupKind ? ' · ' + subtypeLabel(e) : ''))}</span></button>`).join('')
-      + '</div>';
-  }
-  $('#calendar').innerHTML = html + '</div>';
+  const months = ranged ? monthsInRange() : [month];
+  $('#calendar').innerHTML = months.map(first => monthGrid(first, list, ranged)).join('')
+    + (ranged && monthsInRange().length === MAX_RANGE_MONTHS ? `<p class="grid-note">Aralığın ilk ${MAX_RANGE_MONTHS} ayı gösteriliyor; daha kısa bir aralık seçin.</p>` : '');
 
   /* Arama: eşleşen etkinlikler tarihten bağımsız olarak takvimin altında. */
   const query = $('#search').value.trim(), results = query.length >= 2 ? filtered(allEvents).sort((a, b) => a.start.localeCompare(b.start)) : [];
@@ -180,8 +216,27 @@ function render() {
   $('#search-list').innerHTML = results.length ? results.map(resultItem).join('') : '<div class="empty">Aramanızla eşleşen etkinlik bulunamadı.</div>';
 
   $('#agenda').innerHTML = current.length
-    ? current.map(e => `<button class="agenda-item ${statusClass(e.status)}" data-event="${e.id}"><span class="agenda-date">${escapeHtml(e.start.slice(8, 10) + '.' + e.start.slice(5, 7))}<small>${escapeHtml(e.all_day ? 'tüm gün' : e.start.slice(11))}</small></span><span class="agenda-body"><strong>${escapeHtml(e.title)}</strong><small>${escapeHtml([e.city, e.category, subtypeLabel(e), locationLabel(e)].join(' · '))}</small>${e.status === 'Planlandı' ? '' : `<small>${escapeHtml(e.status)}</small>`}</span></button>`).join('')
-    : '<div class="empty">Bu ay için etkinlik bulunmuyor.<br>Başka bir ay seçebilir veya filtreleri temizleyebilirsiniz.</div>';
+    ? current.map(e => `<button class="agenda-item ${statusClass(e.status)}" data-event="${e.id}"><span class="agenda-date">${escapeHtml(e.start.slice(8, 10) + '.' + e.start.slice(5, 7))}<small>${escapeHtml(e.start.slice(0, 4))}</small></span><span class="agenda-body"><strong>${escapeHtml(e.title)}</strong><small>${escapeHtml([e.city, e.category, subtypeLabel(e), locationLabel(e)].join(' · '))}</small>${e.status === 'Planlandı' ? '' : `<small>${escapeHtml(e.status)}</small>`}</span></button>`).join('')
+    : `<div class="empty">${ranged ? 'Seçilen tarih aralığında' : 'Bu ay'} etkinlik bulunmuyor.<br>Başka bir dönem seçebilir veya filtreleri temizleyebilirsiniz.</div>`;
+}
+
+/** Bir ayın 42 kutuluk (6 tam hafta) ızgarası; pazartesi başlar. */
+function monthGrid(first, list, titled) {
+  const from = new Date(first); from.setDate(1 - ((from.getDay() + 6) % 7));
+  let html = (titled ? `<h3 class="grid-title">${escapeHtml(monthFormat.format(first))}</h3>` : '')
+    + '<div class="week">' + ['PZT', 'SAL', 'ÇAR', 'PER', 'CUM', 'CMT', 'PAZ'].map(x => `<span>${x}</span>`).join('') + '</div><div class="grid">';
+  for (let i = 0; i < 42; i++) {
+    const day = new Date(from); day.setDate(day.getDate() + i);
+    const key = dateKey(day), next = shiftDay(key, 1);
+    const dayEvents = list.filter(e => e.start < next + 'T00:00' && e.end > key + 'T00:00');
+    /* Bir günde en fazla MAX_DAY_EVENTS kutucuk; fazlası "+N daha" ile açılır. */
+    const extra = dayEvents.length - MAX_DAY_EVENTS, expanded = expandedDay === key;
+    html += `<div class="day ${day.getMonth() !== first.getMonth() ? 'outside' : ''} ${key === nowString ? 'is-today' : ''}"><span class="day-number">${day.getDate()}</span>`
+      + (extra > 0 ? `<button type="button" class="day-more" data-day-more="${key}">${expanded ? 'Daha az göster' : `+${extra} etkinlik daha`}</button>` : '')
+      + (expanded ? dayEvents : dayEvents.slice(0, MAX_DAY_EVENTS)).map(e => `<button class="event-chip ${statusClass(e.status)}" data-event="${e.id}" title="${escapeHtml([e.title, e.status, e.city, e.category, subtypeLabel(e)].join(' · '))}">${escapeHtml(e.title)}<span>${escapeHtml(placeLabel(e) + (e.category === meta.groupKind ? ' · ' + subtypeLabel(e) : ''))}</span></button>`).join('')
+      + '</div>';
+  }
+  return html + '</div>';
 }
 
 const resultItem = e => `<button class="agenda-item ${statusClass(e.status)}" data-event="${e.id}"><span class="agenda-date">${escapeHtml(e.start.slice(8, 10) + '.' + e.start.slice(5, 7))}<small>${escapeHtml(e.start.slice(0, 4))}</small></span><span class="agenda-body"><strong>${escapeHtml(e.title)}</strong><small>${escapeHtml([e.city, e.category, subtypeLabel(e), locationLabel(e)].join(' · '))}</small><small>${escapeHtml(e.status)}</small></span></button>`;
@@ -193,8 +248,9 @@ const resultItem = e => `<button class="agenda-item ${statusClass(e.status)}" da
 const groupsOf = e => (e.category === meta.groupKind ? listOf(e.subtypes) : []);
 const placesOf = e => (e.cities ? listOf(e.cities) : [e.scope]);
 const statFilters = {
-  done: { select: '#category', label: 'Tamamlanan etkinlikler, türlerine göre', subset: e => e.status === 'Tamamlandı', values: e => [e.category] },
-  upcoming: { select: '#category', label: 'Planlanan ve ertelenen etkinlikler, türlerine göre', subset: e => e.status === 'Planlandı' || e.status === 'Ertelendi', values: e => [e.category] },
+  /* `all`: hiç etkinliği olmayan türler de listelenir (0 adetle). */
+  done: { select: '#category', label: 'Tamamlanan etkinlikler, türlerine göre', subset: e => e.status === 'Tamamlandı', values: e => [e.category], all: () => meta.categories },
+  upcoming: { select: '#category', label: 'Planlanan ve ertelenen etkinlikler, türlerine göre', subset: e => e.status === 'Planlandı' || e.status === 'Ertelendi', values: e => [e.category], all: () => meta.categories },
   cities: { select: '#city', label: 'İllere göre etkinlik sayısı', values: e => listOf(e.cities), distinct: true },
   themes: { select: '#theme', label: 'Çalışma gruplarına göre etkinlik sayısı', values: groupsOf, distinct: true },
   students: { select: '#city', label: 'Kapsam ve illere göre öğrenci sayısı (ortak il etkinliği her ilinde sayılır)', values: placesOf, weight: e => e.students || 0 },
@@ -209,25 +265,34 @@ function statTotal(stat, list) {
   return list.filter(stat.subset).length;
 }
 
-function renderBreakdown(current) {
+function renderBreakdown() {
   for (const button of document.querySelectorAll('[data-stat]')) button.setAttribute('aria-expanded', String(button.dataset.stat === openStat));
   const box = $('#stat-breakdown');
   box.hidden = !openStat;
   if (!openStat) return;
-  const { select, label, subset = () => true, values, weight } = statFilters[openStat];
-  const counts = new Map();
-  for (const e of current.filter(subset)) for (const value of values(e)) counts.set(value, (counts.get(value) || 0) + (weight ? weight(e) : 1));
-  const rows = [...counts].filter(([, count]) => count > 0).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'tr'));
+  const { select, label, subset = () => true, values, weight, all } = statFilters[openStat];
+  const list = (onlyMonth ? shownEvents(select) : filtered(allEvents, select)).filter(subset);
+  const counts = new Map(all ? all().map(value => [value, 0]) : []);
+  for (const e of list) for (const value of values(e)) counts.set(value, (counts.get(value) || 0) + (weight ? weight(e) : 1));
+  const rows = [...counts].filter(([, count]) => count > 0 || all).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'tr'));
   const active = $(select).value;
+  /* Seçili değerin etkinlikleri, en yenisi başta, hemen altında listelenir. */
+  const chosen = active ? list.filter(e => values(e).includes(active)).sort((a, b) => b.start.localeCompare(a.start)) : [];
   box.innerHTML = `<p>${label}${active ? ' · seçimi kaldırmak için tekrar tıklayın' : ' · süzmek için tıklayın'}</p>`
     + (rows.length
       ? `<div class="stat-pills">${rows.map(([value, count]) => `<button type="button" class="stat-pill" data-filter="${openStat}" data-value="${escapeHtml(value)}" aria-pressed="${value === active}">${escapeHtml(value)} <b>${count.toLocaleString('tr-TR')}</b></button>`).join('')}</div>`
-      : '<p>Gösterilecek etkinlik yok.</p>');
+      : '<p>Gösterilecek etkinlik yok.</p>')
+    + (active
+      ? `<div class="stat-events"><p>${escapeHtml(active)} · ${chosen.length} etkinlik${chosen.length > MAX_STAT_EVENTS ? ` (en yenisinden ${MAX_STAT_EVENTS} tanesi)` : ''}</p>`
+        + (chosen.length ? chosen.slice(0, MAX_STAT_EVENTS).map(resultItem).join('') : '<div class="empty">Bu seçimde etkinlik yok.</div>') + '</div>'
+      : '');
 }
 
 $('#stat-month').addEventListener('change', event => { onlyMonth = event.target.checked; if (meta) render(); });
+$('#mine').addEventListener('change', () => { if (meta) render(); });
 
 document.querySelector('.hero-stats').addEventListener('click', event => {
+  if (event.target.closest('#stat-clear')) return clearFilters();
   const stat = event.target.closest('[data-stat]');
   if (stat) { openStat = openStat === stat.dataset.stat ? null : stat.dataset.stat; return meta && render(); }
   const pill = event.target.closest('[data-filter]');
@@ -270,7 +335,10 @@ function showEvent(id) {
     gallery.hidden = !rows.length;
   }).catch(() => {});
   $('#export').href = `takvim.ics?id=${selected.id}`;
-  $('#edit').hidden = $('#delete').hidden = !meta.user;
+  /* İl yöneticisi kendi ilini içeren etkinlikleri yönetir; yetkisi olmayan
+     kayıtta düğmeler hiç görünmez (sunucu da aynı kuralı uygular). */
+  const canManage = !!meta.user && (meta.user.central || listOf(selected.cities).includes(meta.user.city));
+  $('#edit').hidden = $('#delete').hidden = !canManage;
   $('#detail-dialog .error').textContent = '';
   $('#detail-dialog').showModal();
 }
@@ -410,13 +478,14 @@ function editEvent(event) {
   for (const box of form.querySelectorAll('[name="cities"]')) { box.checked = chosen.includes(box.value) || box.value === own; box.disabled = box.value === own; }
   renderSubtypes(listOf(value.subtypes));
   applyChoices();
+  /* Etkinlikler gün bazlıdır: saat sorulmaz, bitiş günü kullanıcıya son gün
+     olarak yazılır (veride ertesi günün 00:00'ı durur). Saatli eski kayıtlar
+     düzenlenince tam güne döner. */
   if (event) {
-    /* Eski "tüm gün" kayıtları 00:00 – ertesi gün 00:00 olarak açılır. */
-    form.elements.start.value = event.start;
-    form.elements.end.value = event.end;
+    form.elements.start.value = event.start.slice(0, 10);
+    form.elements.end.value = lastDay(event);
   } else {
-    form.elements.start.value = dateKey(month) + 'T09:00';
-    form.elements.end.value = dateKey(month) + 'T17:00';
+    form.elements.start.value = form.elements.end.value = rangeOn() ? rangeFrom : dateKey(month);
   }
   $('#form-title').textContent = event ? 'Etkinliği düzenle' : 'Etkinlik ekle';
   form.querySelector('.error').textContent = '';
@@ -437,7 +506,7 @@ $('#today').onclick = () => { month = new Date(nowString + 'T12:00:00'); month.s
 $('#month-view').onclick = () => { mode = 'month'; render(); };
 $('#list-view').onclick = () => { mode = 'list'; render(); };
 
-for (const selector of ['#city', '#theme', '#category', '#subtype']) $(selector).addEventListener('change', () => meta && render());
+for (const selector of ['#city', '#theme', '#category', '#subtype', '#event-status']) $(selector).addEventListener('change', () => meta && render());
 $('#search').addEventListener('input', () => meta && render());
 $('#month-pick').addEventListener('change', event => { month.setMonth(Number(event.target.value)); reload(); });
 $('#year-pick').addEventListener('change', event => { month.setFullYear(Number(event.target.value)); reload(); });
@@ -448,9 +517,24 @@ $('#calendar').addEventListener('click', event => {
   expandedDay = expandedDay === more.dataset.dayMore ? null : more.dataset.dayMore;
   render();
 });
-$('#clear').onclick = () => {
-  $('#search').value = $('#city').value = $('#theme').value = $('#category').value = $('#subtype').value = '';
+/** Kenar çubuğundaki ve sayaç dökümünden gelen tüm süzgeçleri kaldırır. */
+function clearFilters() {
+  for (const selector of FILTERS) $(selector).value = '';
+  $('#mine').checked = false;
   reload();
+}
+$('#clear').onclick = clearFilters;
+
+/* Tarih aralığı: iki kutu da doluysa takvim aralığa geçer. */
+for (const selector of ['#range-from', '#range-to']) $(selector).addEventListener('change', () => {
+  rangeFrom = $('#range-from').value; rangeTo = $('#range-to').value;
+  expandedDay = null;
+  if (meta) render();
+});
+$('#range-clear').onclick = () => {
+  rangeFrom = rangeTo = $('#range-from').value = $('#range-to').value = '';
+  expandedDay = null;
+  if (meta) render();
 };
 
 $('#feed-copy').onclick = async () => {
@@ -488,10 +572,17 @@ async function usersAction(target) {
   $('#users-error').textContent = '';
   try {
     if (target.dataset.role === 'reset') {
-      const password = generatePassword();
-      if (!confirm(`${name} hesabına yeni bir parola atanacak ve açık oturumları kapanacak.\n\nYeni parola:\n${password}\n\nBu parolayı şimdi kopyalayın — pencere kapandıktan sonra bir daha gösterilmez.`)) return;
-      await api('api/users/' + id, { method: 'PUT', body: JSON.stringify({ password }) });
-      $('#users-error').textContent = `${name} için yeni parola atandı. Kişiye iletmeyi unutmayın.`;
+      /* Parola penceresi açılır: hazır bir öneriyle gelir ama yönetici
+         değiştirebilir, yeniden üretebilir ve panoya kopyalayabilir. */
+      resetTarget = { id, name };
+      const form = $('#reset-form');
+      form.reset();
+      form.elements.password.value = generatePassword();
+      $('#reset-lede').textContent = `${name} hesabına yeni bir parola atanacak; bu hesabın açık oturumları kapanır.`;
+      form.querySelector('.error').textContent = '';
+      $('#reset-copy').textContent = 'Parolayı kopyala';
+      $('#reset-dialog').showModal();
+      return;
     } else if (target.dataset.role === 'remove') {
       if (!confirm(`${name} hesabı kaldırılsın mı? Bu hesapla açılmış etkinlikler takvimde kalır.`)) return;
       const outcome = await api('api/users/' + id, { method: 'DELETE' });
@@ -504,9 +595,39 @@ async function usersAction(target) {
   } catch (error) { $('#users-error').textContent = error.message; await loadUsers(); }
 }
 
-$('#users-list').addEventListener('click', event => usersAction(event.target));
-$('#users-list').addEventListener('change', event => usersAction(event.target));
+/* Tıklama yalnızca düğmeleri işler: açılır liste de tıklanınca "click" verdiği
+   için, seçim yapılmadan yetki kaydediliyor ve liste yeniden çizilip açılan
+   liste kapanıyordu. Yetki alanı yalnızca değer değişince kaydedilir. */
+$('#users-list').addEventListener('click', event => {
+  const button = event.target.closest('button[data-role]');
+  if (button) usersAction(button);
+});
+$('#users-list').addEventListener('change', event => {
+  const field = event.target.closest('select[data-role]');
+  if (field) usersAction(field);
+});
 $('#generate-password').onclick = () => { $('#user-form').elements.password.value = generatePassword(); };
+
+/* Parola verilecek hesap; "Parola ver" penceresi açıkken dolu kalır. */
+let resetTarget = null;
+$('#reset-generate').onclick = () => { $('#reset-form').elements.password.value = generatePassword(); };
+$('#reset-copy').onclick = async () => {
+  const field = $('#reset-form').elements.password;
+  try { await navigator.clipboard.writeText(field.value); $('#reset-copy').textContent = 'Kopyalandı ✓'; }
+  catch { field.select(); $('#reset-copy').textContent = 'Parolayı seçip kopyalayın'; }
+  setTimeout(() => { $('#reset-copy').textContent = 'Parolayı kopyala'; }, 2500);
+};
+$('#reset-form').onsubmit = submitHandler(async form => {
+  if (!resetTarget) return;
+  const { id, name } = resetTarget, password = form.elements.password.value;
+  await api('api/users/' + id, { method: 'PUT', body: JSON.stringify({ password }) });
+  resetTarget = null;
+  $('#reset-dialog').close();
+  /* Parola listenin üstünde yazılı kalır: pencere kapandıktan sonra da
+     kopyalanabilsin (eski akışta confirm penceresiyle birlikte kayboluyordu). */
+  $('#users-error').textContent = `${name} için yeni parola atandı: ${password} — kişiye iletmeyi unutmayın.`;
+  await loadUsers();
+});
 
 $('#users-button').onclick = async () => {
   const form = $('#user-form');
@@ -560,48 +681,14 @@ $('#password-form').onsubmit = submitHandler(async form => {
 /* --- Faaliyet raporu: dönem seçimi, Word veya Excel ---------------------- */
 const monthEnd = key => dateKey(new Date(Number(key.slice(0, 4)), Number(key.slice(5, 7)), 0));
 
-function setReportRange(from, to) {
-  const form = $('#report-form');
-  form.elements.from.value = from;
-  form.elements.to.value = to;
-  form.elements.month.value = from.endsWith('-01') && to === monthEnd(from) ? from.slice(0, 7) : '';
-}
-
-/** Hızlı seçimler görüntülenen aya göre hesaplanır; geriye dönük raporlar
-    için önceki ay, önceki eğitim-öğretim yılı ve önceki yıl da sunulur.
-    Eğitim-öğretim yılı Eylül'de başlar: 1. dönem Eylül–Ocak, 2. dönem Şubat–Haziran. */
-function reportPresets() {
-  const year = month.getFullYear(), school = month.getMonth() >= 8 ? year : year - 1, key = dateKey(month);
-  const previous = new Date(year, month.getMonth() - 1, 1), previousKey = dateKey(previous);
-  const schoolYear = s => [
-    [`1. dönem (Eylül ${s} – Ocak ${s + 1})`, `${s}-09-01`, `${s + 1}-01-31`],
-    [`2. dönem (Şubat – Haziran ${s + 1})`, `${s + 1}-02-01`, `${s + 1}-06-30`],
-    [`${s}–${s + 1} eğitim-öğretim yılı`, `${s}-09-01`, `${s + 1}-06-30`],
-  ];
-  return [
-    [monthFormat.format(month), key, monthEnd(key)],
-    ...schoolYear(school),
-    [`${year} yılı`, `${year}-01-01`, `${year}-12-31`],
-    [monthFormat.format(previous), previousKey, monthEnd(previousKey)],
-    ...schoolYear(school - 1),
-    [`${year - 1} yılı`, `${year - 1}-01-01`, `${year - 1}-12-31`],
-  ];
-}
-
+/** Dönem, takvimde seçili tarih aralığıyla (yoksa görüntülenen ayla) açılır. */
 $('#report').onclick = () => {
-  const form = $('#report-form'), presets = reportPresets();
-  $('#report-presets').innerHTML = presets.map(([label, from, to]) => `<button type="button" class="button button-secondary inline-add" data-from="${from}" data-to="${to}">${escapeHtml(label)}</button>`).join('');
-  setReportRange(presets[0][1], presets[0][2]);
+  const form = $('#report-form'), key = dateKey(month);
+  form.elements.from.value = rangeOn() ? rangeFrom : key;
+  form.elements.to.value = rangeOn() ? rangeTo : monthEnd(key);
   form.querySelector('.error').textContent = '';
   $('#report-dialog').showModal();
 };
-$('#report-presets').addEventListener('click', event => {
-  const preset = event.target.closest('[data-from]');
-  if (preset) setReportRange(preset.dataset.from, preset.dataset.to);
-});
-$('#report-form').elements.month.addEventListener('change', event => {
-  if (event.target.value) setReportRange(event.target.value + '-01', monthEnd(event.target.value + '-01'));
-});
 
 /** Bağlantı yerine fetch: oturum düşmüşse tarayıcı hata JSON'unu rapor
     dosyası diye kaydetmesin, mesaj pencerede görünsün. */
@@ -613,6 +700,7 @@ $('#report-form').onsubmit = submitHandler(async form => {
   if ($('#theme').value) params.set('tema', $('#theme').value);
   if ($('#category').value) params.set('tur', $('#category').value);
   if ($('#subtype').value) params.set('alt', $('#subtype').value);
+  if ($('#event-status').value) params.set('durum', $('#event-status').value);
   const response = await fetch('api/rapor?' + params);
   if (!response.ok) {
     const message = (await response.json().catch(() => ({}))).error || 'Rapor oluşturulamadı.';
@@ -672,7 +760,7 @@ $('#edit').onclick = () => { $('#detail-dialog').close(); editEvent(selected); }
 
 $('#event-form').onsubmit = submitHandler(async form => {
   const data = Object.fromEntries(new FormData(form));
-  data.all_day = false;
+  data.all_day = true;
   /* Devre dışı alanlar ve çoklu seçimler FormData'dan eksiksiz gelmez. */
   data.city = form.elements.city.value;
   data.subtypes = checkedValues(form, 'subtypes');
@@ -706,6 +794,9 @@ async function init() {
     /* Pasif gruplar formdaki gibi listede görünür ama seçilemez. */
     $('#theme').innerHTML = options(meta.groups, 'Tüm çalışma grupları') + meta.passiveGroups.map(value => `<option disabled>${escapeHtml(value)} (pasif)</option>`).join('');
     $('#category').innerHTML = options(meta.categories, 'Tüm türler');
+    /* Kenar çubuğunda yalnızca planlanan ve tamamlanan süzülür; ertelenen ve
+       iptal edilen kayıtlar formda seçilmeye devam eder. */
+    $('#event-status').innerHTML = options(['Planlandı', 'Tamamlandı'], 'Tüm durumlar');
     $('#city-pick').innerHTML = $('#city').innerHTML;
     const monthName = new Intl.DateTimeFormat('tr-TR', { month: 'long' });
     $('#month-pick').innerHTML = Array.from({ length: 12 }, (_, i) => `<option value="${i}">${monthName.format(new Date(2026, i, 1))}</option>`).join('');

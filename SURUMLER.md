@@ -11,6 +11,58 @@ Sunucuda hangi sürümün çalıştığı: `ssh genctek 'cat /opt/genctektakvim/
 
 ## Yayımlanmamış
 
+## v2.4.0 — 16 Eylül 2026
+
+- **"Diğer" etkinlik türü**: dördüncü tür olarak eklendi (Temel GençTek
+  etkinliği, İl etkinliği, Çalışma grubu etkinliği, Diğer). Alt türü yoktur;
+  formda, süzgeçlerde, abonelikte ve raporda diğerleri gibi çalışır.
+- **"Kendi girdiğim etkinlikler" süzgeci**: sayaç kartlarının başında,
+  "Yalnızca görüntülenen dönem"in yanında; yalnızca il yöneticisine görünür ve
+  takvimi, listeyi, sayaçları o kullanıcının eklediği kayıtlara indirir.
+  Etkinlik kaydının sahibi (`owner`) bu amaçla API'den dönüyor, ama yalnızca
+  giriş yapmış kullanıcıya. **Yetki kuralı değişmedi**: il yöneticisi kendi
+  ilini içeren tüm etkinlikleri düzenleyip silebilir (koordinatör değişince
+  ilin eski kayıtları sahipsiz kalmasın diye), merkez yöneticisi hepsini.
+  Etkinlik penceresindeki Düzenle / Sil düğmeleri artık yetkisi olmayan
+  kullanıcıya hiç gösterilmiyor.
+- **Parola ver penceresi**: bir hesaba parola atarken kullanılan tarayıcı
+  onay kutusu kalktı. Artık açılan pencerede parola önerisi hazır gelir;
+  yönetici bunu değiştirebilir, yeniden üretebilir veya panoya kopyalayabilir.
+  Atanan parola pencere kapandıktan sonra da liste başında yazılı kalır.
+- **Düzeltme (kullanıcı yönetimi)**: bir hesabın yetki alanı (il) açılır
+  listesine tıklamak, seçim yapılmadan kaydetmeyi tetikliyor ve listeyi
+  yeniden çizerek seçimi olanaksız kılıyordu; üstelik her tıklamada o hesabın
+  açık oturumları kapanıyordu. Tıklama artık yalnızca düğmeleri, kaydetme ise
+  yalnızca seçim değişikliğini izler.
+- **Takvimde tarih aralığı**: takvim denetimlerine başlangıç–bitiş kutuları
+  eklendi; aralık seçilince kaç ay sürüyorsa o kadar ay alt alta çizilir (en
+  fazla 24 ay), sayaçlar ve liste görünümü de aralığa göre çalışır.
+- **Etkinlikler gün bazlı**: formda saat sorulmaz, yalnızca başlangıç ve bitiş
+  günü seçilir (bitiş günü dahildir). Saat taşıyan eski kayıtlar açılışta tam
+  güne çevrilir (`lib/db.mjs`, `allDayOnly`): gün korunur, saat düşer.
+- **Durum süzgeci**: kenar çubuğuna "Etkinlik durumu" eklendi; abonelik ve
+  rapora `durum=` parametresiyle yansır.
+- **Fotoğraf arşivi**: faaliyet raporu penceresinde Word / Excel'in yanına
+  "Fotoğraflar (.zip)" seçeneği eklendi. Seçilen dönemin (ve süzgeçlerin)
+  etkinliklerine yüklenmiş fotoğrafları tek arşiv olarak indirir. Karışmaması
+  için hem klasör hem dosya adı etkinliği taşır ("2026-09-16 Etkinlik adı /
+  2026-09-16 Etkinlik adı - 1.jpg"); arşivin kökündeki `icindekiler.txt`
+  klasörleri etkinlik adı, tarih, kapsam, tür ve durumla eşleştirir. En fazla
+  500 fotoğraf. Uç: `GET /api/rapor?...&bicim=zip`.
+- **Faaliyet raporu**: hızlı dönem düğmeleri ve "Ay seç" alanı kaldırıldı;
+  dönem doğrudan başlangıç–bitiş tarihiyle (takvimde aralık seçiliyse onunla
+  dolu gelir) belirlenir.
+- Excel'de "Alt tür" sütunu "İlişkili olduğu temel etkinlik" oldu; paydaş
+  başlıkları "Paydaş / İşbirliği Yapılan Kurum / Kişi" oldu.
+- Sayaç kartlarının altındaki sabit "Saatler Türkiye saatidir…" notu kaldırıldı;
+  kartların başlığına kalıcı "Filtreleri temizle" düğmesi eklendi (süzgeç yokken
+  pasif görünür).
+- **Sayaç dökümü**: tür dökümünde (tamamlanan / planlanan) hiç etkinliği
+  olmayan türler de 0 adetle listelenir; bir değere tıklayınca hemen altında o
+  seçimin en yeni 10 etkinliği görünür, tıklanınca etkinlik kartı açılır. Döküm
+  artık kendi süzgecini yok sayarak hesaplanır: bir değer seçilince diğer
+  değerler listeden kaybolmaz.
+
 ## v2.3.0 — 15 Eylül 2026
 
 - **Etkinlik modeli**: kapsam (uluslararası / ulusal / il / ortak iller), tür ve
