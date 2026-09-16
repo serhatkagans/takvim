@@ -231,11 +231,21 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
       return response.headers.get('set-cookie').split(';')[0];
     };
 
-    /* Herkese açık okuma. Sayfa kök-mutlak adres kullanmamalı: alt dizinde
-       (/genctektakvim/) "/app.js" komşu uygulamaya giderdi. */
+    /* Oturumsuz ziyaretçi takvimi değil giriş sayfasını görür. Sayfa kök-mutlak
+       adres kullanmamalı: alt dizinde (/genctektakvim/) "/app.js" komşu
+       uygulamaya giderdi. */
     const page = await request('/');
     assert.equal(page.status, 200);
-    assert.doesNotMatch(await page.text(), /(href|src)="\//, 'index.html göreli adres kullanır');
+    const pageText = await page.text();
+    assert.match(pageText, /Etkinlik takvimine giriş/, 'oturumsuz ziyaretçi giriş sayfasını görür');
+    assert.doesNotMatch(pageText, /(href|src)="\//, 'giriş sayfası göreli adres kullanır');
+    assert.equal((await request('/index.html')).status, 401, 'takvim sayfası oturum ister');
+    assert.equal((await request('/app.js')).status, 401, 'takvim betiği oturum ister');
+    assert.equal((await request('/style.css')).status, 200, 'stil dosyası açık kalır');
+    /* Giriş betiği ayrı dosyadır (CSP satır içi betiği engeller) ve açıktır. */
+    assert.equal((await request('/giris.js')).status, 200, 'giriş betiği açık');
+    assert.doesNotMatch(pageText, /<script>/, 'giriş sayfasında satır içi betik yok');
+    assert.equal((await request('/api/events?tum=1')).status, 401, 'takvim verisi oturum ister');
     const meta = await (await request('/api/meta')).json();
     assert.equal(meta.cities.length, 81);
     assert.equal(meta.user, null);
@@ -247,13 +257,22 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
     assert.equal((await fetch(origin + '/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: '{}' })).status, 403, 'Origin başlığı olmayan istek reddedilir');
     assert.equal((await request('/api/events', 'POST', { ...sample, end: sample.start }, cookie)).status, 400);
 
+    /* Oturum açılınca aynı adres takvim sayfasını döndürür. */
+    const takvim = await request('/', 'GET', null, cookie);
+    assert.equal(takvim.status, 200);
+    const takvimText = await takvim.text();
+    assert.match(takvimText, /Etkinlik programı/, 'oturumla takvim sayfası gelir');
+    assert.doesNotMatch(takvimText, /(href|src)="\//, 'index.html göreli adres kullanır');
+    assert.equal((await request('/app.js', 'GET', null, cookie)).status, 200);
+
     const created = await request('/api/events', 'POST', sample, cookie);
     assert.equal(created.status, 201);
     const { id, updated } = await created.json();
     assert.equal(typeof id, 'number');
 
     /* Aralık okuma ve sınırı */
-    let records = await (await request('/api/events?from=2026-09-01&to=2026-10-01')).json();
+    assert.equal((await request('/api/events?from=2026-09-01&to=2026-10-01')).status, 401, 'oturumsuz okuma reddedilir');
+    let records = await (await request('/api/events?from=2026-09-01&to=2026-10-01', 'GET', null, cookie)).json();
     assert.equal(records.length, 1);
     assert.equal(records[0].theme, 'Yapay Zekâ');
     assert.equal(records[0].scope, 'İl');
@@ -269,26 +288,26 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
     const photoIds = [];
     for (let i = 0; i < 5; i++) { const response = await upload(jpeg, cookie); assert.equal(response.status, 201); photoIds.push((await response.json()).id); }
     assert.equal((await upload(jpeg, cookie)).status, 400, 'altıncı fotoğraf reddedilir');
-    const photo = await request('/api/photos/' + photoIds[0]);
+    assert.equal((await request('/api/photos/' + photoIds[0])).status, 401, 'fotoğraf oturum ister');
+    const photo = await request('/api/photos/' + photoIds[0], 'GET', null, cookie);
     assert.equal(photo.status, 200);
     assert.equal(photo.headers.get('content-type'), 'image/jpeg');
     assert.deepEqual(Buffer.from(await photo.arrayBuffer()), jpeg);
     assert.equal((await request(`/api/events/${id}/photos/${photoIds[4]}`, 'DELETE', null, cookie)).status, 200);
-    assert.deepEqual((await (await request(`/api/events/${id}/photos`)).json()).map(p => p.id), photoIds.slice(0, 4));
+    assert.deepEqual((await (await request(`/api/events/${id}/photos`, 'GET', null, cookie)).json()).map(p => p.id), photoIds.slice(0, 4));
     assert.equal('url' in records[0], false, 'katılım bağlantısı artık dönmez');
-    /* Kaydı kimin açtığı yalnızca yöneticiye gider ("kendi girdiğim etkinlikler" süzgeci). */
-    assert.equal('owner' in records[0], false, 'ziyaretçiye owner gönderilmez');
+    /* Kaydı kimin açtığı "kendi girdiğim etkinlikler" süzgeci için dönüyor. */
     const sahipli = await (await request('/api/events?tum=1', 'GET', null, cookie)).json();
     assert.ok(sahipli.length && sahipli.every(row => typeof row.owner === 'number'), 'yönetici owner alanını görür');
     assert.equal(records[0].end, sample.end, '"end" sütunu iki arka uçta da aynı adla döner');
     assert.equal(records[0].all_day, 0);
-    assert.equal((await request('/api/events?from=2026-01-01&to=2026-12-31')).status, 400, 'aralık sınırı');
+    assert.equal((await request('/api/events?from=2026-01-01&to=2026-12-31', 'GET', null, cookie)).status, 400, 'aralık sınırı');
 
     /* Genel arama ay penceresinden bağımsız çalışır, büyük/küçük harf duyarsız */
-    const found = await (await request('/api/events?q=' + encodeURIComponent('YAPAY'))).json();
+    const found = await (await request('/api/events?q=' + encodeURIComponent('YAPAY'), 'GET', null, cookie)).json();
     assert.equal(found.length, 1);
-    assert.equal((await (await request('/api/events?q=' + encodeURIComponent('%%'))).json()).length, 0, 'LIKE joker karakteri kaçırılır');
-    assert.equal((await request('/api/events?q=a')).status, 400);
+    assert.equal((await (await request('/api/events?q=' + encodeURIComponent('%%'), 'GET', null, cookie)).json()).length, 0, 'LIKE joker karakteri kaçırılır');
+    assert.equal((await request('/api/events?q=a', 'GET', null, cookie)).status, 400);
 
     /* Sürüm çakışması */
     assert.equal((await request('/api/events/' + id, 'PUT', { ...sample, city: 'İzmir', updated: '2020-01-01T00:00:00.000Z' }, cookie)).status, 409);
@@ -304,7 +323,7 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
     assert.equal((await request('/api/events', 'POST', { ...sample, city: 'İzmir' }, ilCookie)).status, 201);
     assert.equal((await request('/api/events', 'POST', { ...ortak, cities: ['Manisa', 'Aydın'] }, ilCookie)).status, 400, 'kendi ilini içermeyen ortak etkinlik reddedilir');
     assert.equal((await request('/api/events', 'POST', ortak, ilCookie)).status, 201, 'kendi ilini içeren ortak etkinlik açılır');
-    assert.equal((await (await request('/api/events?tum=1')).json()).length, 3, 'sayaçlar için tüm kayıtlar');
+    assert.equal((await (await request('/api/events?tum=1', 'GET', null, cookie)).json()).length, 3, 'sayaçlar için tüm kayıtlar');
 
     /* Abonelik akışı: ortak il etkinliği her ilinin akışında görünür */
     const feed = await request('/takvim.ics?il=' + encodeURIComponent('İzmir'));
@@ -386,8 +405,8 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
 
     /* Yumuşak silme: takvimden kalkar, satır durur */
     assert.equal((await request('/api/events/' + id, 'DELETE', null, cookie)).status, 200);
-    assert.equal((await request('/api/photos/' + photoIds[0])).status, 404, 'silinen etkinliğin fotoğrafı gösterilmez');
-    records = await (await request('/api/events?from=2026-09-01&to=2026-10-01')).json();
+    assert.equal((await request('/api/photos/' + photoIds[0], 'GET', null, cookie)).status, 404, 'silinen etkinliğin fotoğrafı gösterilmez');
+    records = await (await request('/api/events?from=2026-09-01&to=2026-10-01', 'GET', null, cookie)).json();
     assert.equal(records.length, 1, 'yalnızca il yöneticisinin kaydı kalır');
     db = await openDb({ url: backend.url || '', dir });
     assert.equal((await db.get('SELECT CAST(count(*) AS INTEGER) AS n FROM events')).n, 3);

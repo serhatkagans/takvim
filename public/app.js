@@ -39,6 +39,9 @@ const placeLabel = e => (listOf(e.cities).length > 3 ? `${listOf(e.cities).lengt
 async function api(path, options = {}) {
   const response = await fetch(path, { ...options, headers: { 'Content-Type': 'application/json', ...options.headers } });
   const data = await response.json();
+  /* Oturum düşünce (8 saat) sayfa boş kalmasın: aynı adres giriş sayfasını
+     döndürür. Giriş isteğinin kendi 401'i yenilemeyi tetiklemez. */
+  if (response.status === 401 && !path.startsWith('api/login')) { location.reload(); throw Error(data.error || 'Oturumunuz kapandı.'); }
   if (!response.ok) throw Error(data.error || 'İşlem tamamlanamadı.');
   return data;
 }

@@ -1,6 +1,6 @@
 # GençTek Etkinlik Takvimi
 
-Türkiye'nin 81 ilini kapsayan, herkese açık takvim (ay veya seçilen tarih aralığı) ve liste görünümü. GençTek çalışma gruplarının tanışma toplantıları, atölyeleri, maratonları ve sektör buluşmaları tek programda toplanır. Etkinlikleri **merkez yöneticisi** ve yetkilendirilmiş **il yöneticileri** ekler; ziyaretçiler süzer, arar ve kendi takvimlerine abone olur. Örnek veya uydurma etkinlik eklenmez.
+Türkiye'nin 81 ilini kapsayan, **giriş gerektiren** takvim (ay veya seçilen tarih aralığı) ve liste görünümü. GençTek çalışma gruplarının tanışma toplantıları, atölyeleri, maratonları ve sektör buluşmaları tek programda toplanır. Etkinlikleri **merkez yöneticisi** ve yetkilendirilmiş **il yöneticileri** ekler; giriş yapan kullanıcılar süzer, arar ve kendi takvimlerine abone olur. Örnek veya uydurma etkinlik eklenmez.
 
 Arayüz GençTek portalının marka paletini kullanır: Pantone 7621 C (`#c4161c`), Neutral Black U (`#414042`), Cool Gray 8 U (`#939598`) ve beyaz; üstte ve altta kırmızı bant, arada beyaz içerik.
 
@@ -14,6 +14,7 @@ Arayüz GençTek portalının marka paletini kullanır: Pantone 7621 C (`#c4161c
 - **Katılım biçimi**: yüz yüze (yer bilgisi zorunlu) veya çevrim içi; isteğe bağlı öğrenci / öğretmen / diğer katılımcı sayıları ve "+ Paydaş ekle" ile kişi – kurum paydaş listesi.
 - **Amaç** ve **açıklama / kapsam** metinleri; etkinlik başına en fazla **5 fotoğraf** (tarayıcıda 1600 px'e küçültülüp veritabanındaki `photos` tablosunda saklanır, yedeğe girer).
 - **Genel arama**: en az iki karakter yazılınca arama görüntülenen döneme değil tüm kayıtlara uygulanır; eşleşenler takvimin altında tarihleriyle listelenir.
+- **Giriş zorunlu**: takvim yalnızca giriş yapmış kullanıcılara açıktır. Oturumu olmayan ziyaretçi `/` adresinde giriş sayfasını (`public/giris.html`) görür; takvim sayfası, `app.js`, etkinlik okuma ucu ve fotoğraflar oturum ister. Stil dosyası, logo ve giriş sayfası açıktır. Oturum düşünce arayüz kendiliğinden giriş sayfasına döner.
 - **Takvim aboneliği**: `/takvim.ics` adresi Google Takvim, Outlook ve telefon takvimlerinin abone olabileceği bir akıştır; `?il=`, `?tema=`, `?tur=`, `?alt=`, `?durum=` süzgeçlerini kabul eder. `?id=` ile tek etkinlik indirilir. Program değiştikçe abone takvimler kendiliğinden güncellenir.
 - **Gün bazlı etkinlikler**: formda saat sorulmaz, başlangıç ve bitiş günü seçilir (bitiş günü dahildir); çok günlük etkinlikler kapsadıkları her günde görünür. **Etkinlik durumu**: Planlandı / Tamamlandı / Ertelendi / İptal edildi — iptal, ICS'te `STATUS:CANCELLED` olarak gider.
 - **Faaliyet raporu** (yalnızca yöneticiler): seçilen dönemin etkinliklerini, kenar çubuğundaki süzgeçlerle **Word (.docx)** veya **Excel (.xlsx)** olarak indirir. Üçüncü seçenek **Fotoğraflar (.zip)**: dönemin etkinliklerine yüklenmiş fotoğrafları, her etkinlik kendi klasöründe ve dosya adı da etkinliği taşıyacak biçimde paketler; arşivin kökündeki `icindekiler.txt` klasörleri etkinlikle eşleştirir. Uç: `GET /api/rapor?bas=&bit=&bicim=docx|xlsx|zip` (süzgeçler: `il`, `tema`, `tur`, `alt`, `durum`).
@@ -97,7 +98,7 @@ Her yedek için farklı hedef klasör kullanın; veritabanı ile varsa `-wal` ve
 
 ## Doğrulama ve kapsam
 
-`npm test`: il/tema listeleri, tarih ve tüm gün doğrulaması, il yöneticisi yetkisi, ICS üretimi (satır katlama ve UTC dönüşümü dâhil), herkese açık okuma, kaynak (CSRF) kontrolü, CRUD, sürüm çakışması, arama, abonelik akışı, parola değiştirme, yumuşak silme, disk kalıcılığı, T.C. kimlik no doğrulaması, alt tür ve durum süzgeci, fotoğraf arşivi (.zip).
+`npm test`: il/tema listeleri, tarih ve tüm gün doğrulaması, il yöneticisi yetkisi, ICS üretimi (satır katlama ve UTC dönüşümü dâhil), giriş zorunluluğu (oturumsuz erişimin reddi), kaynak (CSRF) kontrolü, CRUD, sürüm çakışması, arama, abonelik akışı, parola değiştirme, yumuşak silme, disk kalıcılığı, T.C. kimlik no doğrulaması, alt tür ve durum süzgeci, fotoğraf arşivi (.zip).
 
 Etkinlikler gün bazlıdır: saat girilmez, kayıtlar tüm gün olarak saklanır ve ICS çıktısına `VALUE=DATE` ile yazılır. Saat taşıyan eski kayıtlar ilk açılışta tam güne çevrilir (`lib/db.mjs`, `allDayOnly`): gün korunur, saat bilgisi düşer. Çok günlük etkinlikler kapsadıkları tüm günlerde görünür. Bir etkinlik en fazla 366 gün sürebilir; tek istekte en çok 100 günlük aralık okunur, arama en çok 200 sonuç döndürür.
 

@@ -11,6 +11,20 @@ Sunucuda hangi sürümün çalıştığı: `ssh genctek 'cat /opt/genctektakvim/
 
 ## Yayımlanmamış
 
+## v2.5.0 — 16 Eylül 2026
+
+- **Takvim artık giriş ister**: uygulama herkese açık olmaktan çıktı. Oturumu
+  olmayan ziyaretçi `/` adresinde yeni giriş sayfasını (`public/giris.html`)
+  görür; takvim sayfası (`index.html`), betiği (`app.js`), etkinlik okuma ucu
+  (`GET /api/events`) ve fotoğraflar oturum ister. Stil dosyası, logo ve giriş
+  sayfası açıktır. **Abonelik akışı (`/takvim.ics`) bilerek açık bırakıldı**:
+  Google Takvim ve Outlook oturum çerezi gönderemez, kapatılsaydı mevcut tüm
+  abonelikler bozulurdu. Oturum düşünce istemci kendiliğinden giriş sayfasına
+  döner. Giriş sayfasının betiği ayrı dosyadadır (`public/giris.js`), çünkü
+  `Content-Security-Policy` satır içi betiği engeller (`script-src 'self'`);
+  form ayrıca `method="post"` ile tanımlıdır, böylece betik çalışmasa bile
+  parola adres satırına yazılmaz.
+
 ## v2.4.0 — 16 Eylül 2026
 
 - **"Diğer" etkinlik türü**: dördüncü tür olarak eklendi (Temel GençTek

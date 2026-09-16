@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>GençTek Etkinlik Takvimi — Giriş</title>
+<link rel="icon" href="genctek.png">
+<link rel="stylesheet" href="style.css">
+<script src="giris.js" defer></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container header-inner">
+    <span class="brand" aria-label="GençTek Etkinlik Takvimi"><span class="brand-mark"><img src="genctek.png" alt=""></span><span>GENÇ<span class="brand-accent">TEK</span> <small>Etkinlik Takvimi</small></span></span>
+  </div>
+</header>
+
+<main class="login-main">
+  <!-- Form GET ile gönderilmesin: betik engellenirse parola adres satırına yazılırdı. -->
+  <form id="login-form" class="login-card" method="post" action="api/login">
+    <p class="eyebrow">Yönetici girişi</p>
+    <h1>Etkinlik takvimine giriş</h1>
+    <p class="login-lede">Takvim yalnızca yetkili kullanıcılara açıktır. Merkez veya il yönetici hesabınızla giriş yapın.</p>
+    <label>T.C. kimlik no<input name="username" autocomplete="username" inputmode="numeric" required maxlength="100" autofocus></label>
+    <label>Parola<input name="password" type="password" autocomplete="current-password" required></label>
+    <p class="error" role="alert" id="login-error"></p>
+    <button class="button button-primary" type="submit">Giriş yap</button>
+  </form>
+</main>
+
+<footer class="site-footer">
+  <div class="container footer-inner">
+    <span class="brand brand-inverse"><span class="brand-mark"><img src="genctek.png" alt=""></span><span>GENÇ<span class="brand-accent">TEK</span></span></span>
+    <p>Sektörün yeni liderleri · 81 ilde ortak etkinlik programı</p>
+  </div>
+</footer>
+
+</body>
+</html>

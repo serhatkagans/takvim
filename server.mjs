@@ -291,31 +291,32 @@ const server = createServer(async (req, res) => {
       return send(res, 405, { error: 'Geçersiz işlem.' });
     }
 
-    /* ---- Etkinlik okuma (herkese açık) ---------------------------------- */
+    /* ---- Etkinlik okuma (oturum gerekir) -------------------------------- */
     if (url.pathname === '/api/events' && req.method === 'GET') {
-      /* Kaydı kimin açtığı yalnızca yöneticileri ilgilendirir ("yalnızca benim
-         eklediklerim" süzgeci ve düzenleme düğmeleri); ziyaretçiye gitmez. */
-      const forViewer = rows => (user ? rows : rows.map(({ owner, ...rest }) => rest));
+      /* Takvim verisi yalnızca oturumla okunur; abonelik akışı (/takvim.ics)
+         ayrı ve açıktır, takvim uygulamaları çerez gönderemez. */
+      if (!user) return send(res, 401, { error: 'Takvimi görmek için giriş yapın.' });
       /* Üstteki sayaçların "tüm etkinlikler" toplamı için bütün canlı kayıtlar. */
-      if (url.searchParams.get('tum') === '1') return send(res, 200, forViewer(await liveEvents('1=1', [])));
+      if (url.searchParams.get('tum') === '1') return send(res, 200, await liveEvents('1=1', []));
       const query = (url.searchParams.get('q') || '').trim();
       if (query) {
         if (query.length < 2 || query.length > 100) return send(res, 400, { error: 'Arama için 2–100 karakter yazın.' });
         const pattern = '%' + query.replace(/[\\%_]/g, c => '\\' + c) + '%';
         const rows = await db.all(`SELECT ${FIELDS} FROM events WHERE deleted_at IS NULL AND (title LIKE ? ESCAPE '\\' OR location LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\' OR city LIKE ? ESCAPE '\\' OR theme LIKE ? ESCAPE '\\' OR subtypes LIKE ? ESCAPE '\\' OR purpose LIKE ? ESCAPE '\\' OR partners LIKE ? ESCAPE '\\') ORDER BY start DESC LIMIT ?`, [pattern, pattern, pattern, pattern, pattern, pattern, pattern, pattern, SEARCH_LIMIT]);
-        return send(res, 200, forViewer(rows));
+        return send(res, 200, rows);
       }
       const from = url.searchParams.get('from'), to = url.searchParams.get('to');
       if (!validDay(from) || !validDay(to) || from >= to) return send(res, 400, { error: 'Geçerli bir tarih aralığı gerekir.' });
       if (daysBetween(from, to) > MAX_RANGE_DAYS) return send(res, 400, { error: `Tarih aralığı en fazla ${MAX_RANGE_DAYS} gün olabilir.` });
-      return send(res, 200, forViewer(await liveEvents('start<? AND "end">?', [to + 'T00:00', from + 'T00:00'])));
+      return send(res, 200, await liveEvents('start<? AND "end">?', [to + 'T00:00', from + 'T00:00']));
     }
 
     /* ---- Fotoğraflar (etkinlik başına en fazla MAX_PHOTOS) ---------------
-       Görüntüleme herkese açık; ekleme ve silme etkinliği düzenleme yetkisiyle
+       Görüntüleme oturum ister; ekleme ve silme etkinliği düzenleme yetkisiyle
        aynı. Silinmiş (arşivdeki) etkinliğin fotoğrafı gösterilmez. */
     const photoFile = url.pathname.match(/^\/api\/photos\/(\d{1,9})$/);
     if (photoFile && readOnly) {
+      if (!user) return send(res, 401, { error: 'Önce giriş yapın.' });
       const photo = await db.get('SELECT p.type,p.data FROM photos p JOIN events e ON e.id=p.event_id WHERE p.id=? AND e.deleted_at IS NULL', [Number(photoFile[1])]);
       if (!photo) return send(res, 404, { error: 'Fotoğraf bulunamadı.' });
       const data = Buffer.from(photo.data);
@@ -328,8 +329,8 @@ const server = createServer(async (req, res) => {
       const eventId = Number(photoPath[1]), photoId = Number(photoPath[2]);
       const target = await db.get('SELECT cities FROM events WHERE id=? AND deleted_at IS NULL', [eventId]);
       if (!target) return send(res, 404, { error: 'Etkinlik bulunamadı.' });
-      if (req.method === 'GET' && !photoId) return send(res, 200, await db.all('SELECT id FROM photos WHERE event_id=? ORDER BY id', [eventId]));
       if (!user) return send(res, 401, { error: 'Önce giriş yapın.' });
+      if (req.method === 'GET' && !photoId) return send(res, 200, await db.all('SELECT id FROM photos WHERE event_id=? ORDER BY id', [eventId]));
       if (user.city && !listOf(target.cities).includes(user.city)) return send(res, 403, { error: 'Bu etkinlik için yetkiniz yok.' });
       if (req.method === 'POST' && !photoId) {
         const data = await rawBody(req, MAX_PHOTO_BYTES);
@@ -387,12 +388,20 @@ const server = createServer(async (req, res) => {
     }
 
     /* ---- Statik dosyalar ------------------------------------------------ */
-    const files = { '/': ['index.html', 'text/html'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'], '/genctek.png': ['genctek.png', 'image/png'] };
-    if (files[url.pathname] && readOnly) {
-      const [file, type] = files[url.pathname];
+    const files = { '/index.html': ['index.html', 'text/html'], '/giris.html': ['giris.html', 'text/html'], '/giris.js': ['giris.js', 'text/javascript'], '/app.js': ['app.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'], '/genctek.png': ['genctek.png', 'image/png'] };
+    /* Takvim yalnızca oturum açmış kullanıcıya gönderilir: "/" oturumsuzken
+       giriş sayfasını döndürür, takvim sayfası ve betiği korunur. Stil, logo
+       ve giriş sayfası herkese açıktır (giriş ekranı onlarsız çizilemez). */
+    const wanted = url.pathname === '/' ? (user ? '/index.html' : '/giris.html') : url.pathname;
+    if (files[wanted] && readOnly) {
+      if (!user && ['/index.html', '/app.js'].includes(wanted)) return send(res, 401, { error: 'Önce giriş yapın.' });
+      const [file, type] = files[wanted];
       const content = await readFile(new URL('./public/' + file, import.meta.url));
       const etag = '"' + createHash('sha256').update(content).digest('hex').slice(0, 32) + '"';
       res.setHeader('Cache-Control', 'no-cache');
+      /* "/" yanıtı oturuma göre değişir (giriş sayfası ya da takvim); bu başlık
+         olmadan tarayıcı veya vekil önbelleği ikisini karıştırabilir. */
+      res.setHeader('Vary', 'Cookie');
       res.setHeader('ETag', etag);
       if (req.headers['if-none-match'] === etag) { res.writeHead(304); return res.end(); }
       res.writeHead(200, { 'Content-Type': type + (type.startsWith('text/') || type.endsWith('javascript') ? '; charset=utf-8' : ''), 'Content-Length': content.length });
