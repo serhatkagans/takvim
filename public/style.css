@@ -1,0 +1,291 @@
+/* GençTek marka paleti — Pantone 7621 C (#c4161c), Neutral Black U (#414042),
+   Cool Gray 8 U (#939598) ve beyaz. Portalın app/globals.css dosyasındaki
+   değişkenlerle birebir aynı; kurumsal kabuk da oradaki kurguyu izliyor:
+   üstte ve altta kırmızı bant, arada beyaz içerik. Kırmızı dekorasyon değil,
+   sayfayı çerçeveleyen kimliktir; vurgu için tek kırmızı alan kuralı geçerli.
+
+   Tipografi: portal Archivo + Source Sans 3 kullanıyor. Bu uygulamanın CSP'si
+   dış kaynak yüklemediği ve harici bağımlılığı olmadığı için aynı yedek yığını
+   ("Segoe UI", system-ui) ile aynı ölçek ve tracking değerleri uygulanıyor. */
+:root {
+  --brand-red: #c4161c;
+  --neutral-black: #414042;
+  --cool-gray: #939598;
+
+  --color-bg: #fff; --color-bg-subtle: #f6f6f7; --color-bg-brand-tint: #fdf1f1; --color-bg-inverse: var(--neutral-black);
+  --color-surface: #fff; --color-border: #e4e4e5; --color-border-strong: var(--cool-gray);
+  --color-text: #555558; --color-text-strong: var(--neutral-black); --color-text-muted: #6e6f71; --color-text-inverse: #fff; --color-text-on-brand: #fff;
+  --color-brand: var(--brand-red); --color-brand-hover: #a81318; --color-brand-active: #8e1014; --color-brand-soft: #e35056; --color-focus: var(--neutral-black);
+  --color-success: #1c7a4a; --color-warning: #8a5a00; --color-danger: #a81318; --color-info: #55565a;
+
+  --shadow-sm: 0 1px 2px rgba(65,64,66,.06),0 1px 3px rgba(65,64,66,.04);
+  --shadow-md: 0 4px 12px rgba(65,64,66,.09);
+  --shadow-lg: 0 14px 34px rgba(65,64,66,.13);
+
+  --font-display: "Segoe UI", system-ui, sans-serif;
+  --font-body: "Segoe UI", system-ui, sans-serif;
+}
+
+* { box-sizing: border-box }
+/* .button ve .text-link display değeri atadığı için tarayıcının [hidden]
+   kuralını eziyordu: giriş yapıldığında "Yönetici girişi" düğmesi hidden
+   işaretlendiği hâlde ekranda kalıyordu. */
+[hidden] { display: none !important }
+body { margin: 0; background: var(--color-bg); color: var(--color-text); font: 400 1.0625rem/1.65 var(--font-body); -webkit-text-size-adjust: 100% }
+a { color: inherit; text-decoration: none }
+button, input, select, textarea { font: inherit; color: inherit }
+button, a, input, select, textarea { outline-offset: 2px }
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid var(--color-focus) }
+h1, h2, h3 { margin-top: 0; color: var(--color-text-strong); font-family: var(--font-display); font-weight: 800; letter-spacing: -.028em; line-height: 1.12; text-wrap: balance }
+h1 { font-size: clamp(2rem, 1.4rem + 2.4vw, 3.1rem); line-height: 1.06; margin-bottom: 16px }
+h2 { font-size: clamp(1.4rem, 1.2rem + .9vw, 1.9rem) }
+p { margin-top: 0 }
+.container { width: min(1240px, calc(100% - 48px)); margin-inline: auto }
+.eyebrow { display: block; font-family: var(--font-display); font-size: .75rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--color-brand); margin: 0 0 14px }
+
+/* --- Düğmeler ---------------------------------------------------------- */
+.button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 18px; border: 1px solid transparent; border-radius: 8px; font-family: var(--font-display); font-weight: 600; cursor: pointer; transition: background 120ms, border-color 120ms, color 120ms, transform 120ms }
+.button:hover { transform: translateY(-1px) }
+.button:disabled { opacity: .6; cursor: wait; transform: none }
+.button-primary { background: var(--color-brand); color: var(--color-text-on-brand) }
+.button-primary:hover { background: var(--color-brand-hover) }
+.button-secondary { background: var(--color-surface); border-color: var(--color-border-strong); color: var(--color-text-strong) }
+.button-danger { background: var(--color-surface); border-color: var(--color-danger); color: var(--color-danger) }
+.button-danger:hover { background: var(--color-danger); color: #fff }
+.text-link { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; padding: 0; color: var(--color-brand); font-family: var(--font-display); font-weight: 700; font-size: .88rem; cursor: pointer }
+.text-link:hover { text-decoration: underline; text-underline-offset: 4px }
+
+/* --- Marka ------------------------------------------------------------- */
+.brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-weight: 900; letter-spacing: -.04em; font-size: 1.18rem; color: var(--color-text-strong) }
+.brand small { display: block; font-size: .68rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; opacity: .85 }
+.brand-mark { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 8px; background: #fff; overflow: hidden; flex: none }
+.brand-mark img { width: 100%; height: 100%; object-fit: contain }
+
+/* --- Üst bant: kurumsal kırmızı --------------------------------------- */
+.site-header { position: sticky; top: 0; z-index: 20; min-height: 72px; background: var(--color-brand); color: #fff; box-shadow: 0 1px 0 rgba(65,64,66,.10) }
+.header-inner { min-height: 72px; display: flex; align-items: center; gap: 24px; flex-wrap: wrap; padding-block: 10px }
+.site-header .brand, .site-header .brand-accent { color: #fff }
+.header-right { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap }
+.who { font-family: var(--font-display); font-size: .82rem; font-weight: 600; color: #fff; padding: 5px 11px; border-radius: 9999px; background: rgba(255,255,255,.16) }
+.header-cta { background: #fff; border-color: #fff; color: var(--color-brand) }
+.header-cta:hover { background: var(--color-bg-brand-tint); color: var(--color-brand-active) }
+.button-ghost { background: transparent; border-color: rgba(255,255,255,.55); color: #fff; font-size: .88rem; min-height: 40px; padding: 8px 14px }
+.button-ghost:hover { background: rgba(255,255,255,.14) }
+
+/* --- Giriş bölümü ------------------------------------------------------ */
+.page-hero { background: var(--color-bg-subtle); border-bottom: 1px solid var(--color-border); padding: 56px 0 48px }
+.hero-inner { display: grid; grid-template-columns: 1fr; gap: 28px; align-items: center }
+.hero-lede { font-size: 1.12rem; margin: 0 }
+.hero-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px }
+/* Başlık solda, onay kutusu ile "Filtreleri temizle" sağda yan yana durur:
+   boşluğu başlık emer, yoksa üç öğede ortadaki ortaya kayar. */
+.stats-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap }
+.stats-head #stat-caption { margin-right: auto }
+.hero-stats .eyebrow { margin: 0; text-transform: capitalize }
+.stats-toggle { margin: 0; cursor: pointer }
+#stat-clear:disabled { opacity: .45; cursor: default }
+#stat-clear:disabled:hover { text-decoration: none }
+.hero-stats .stat { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 12px; padding: 16px; display: grid; text-align: left; box-shadow: var(--shadow-sm); cursor: pointer; transition: border-color 120ms, transform 120ms }
+.hero-stats .stat:hover { border-color: var(--color-brand); transform: translateY(-1px) }
+.hero-stats .stat[aria-expanded="true"] { border-color: var(--color-brand); box-shadow: 0 0 0 2px var(--color-brand) }
+.stat-breakdown { grid-column: 1 / -1; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 12px; padding: 12px 14px; box-shadow: var(--shadow-sm) }
+.stat-breakdown p { margin: 0 0 8px; font-size: .8rem; color: var(--color-text-muted) }
+.stat-pills { display: flex; flex-wrap: wrap; gap: 6px }
+.stat-pill { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--color-border-strong); border-radius: 9999px; background: var(--color-surface); padding: 4px 10px; font-size: .8rem; font-weight: 600; cursor: pointer }
+.stat-pill b { font-weight: 800; color: var(--color-brand); font-variant-numeric: tabular-nums }
+.stat-pill:hover { border-color: var(--color-brand); color: var(--color-brand) }
+.stat-pill[aria-pressed="true"] { background: var(--color-brand); border-color: var(--color-brand); color: #fff }
+.stat-pill[aria-pressed="true"] b { color: #fff }
+.stat-events { margin-top: 12px; border-top: 1px solid var(--color-border) }
+.stat-events > p { margin: 10px 0 0 }
+.stat-events .agenda-item { grid-template-columns: 62px 1fr; gap: 12px; padding: 10px 2px }
+.stat-events .agenda-item:last-child { border-bottom: 0 }
+.stat-events .empty { padding: 20px 2px }
+/* Giriş sayfası (giris.html): takvim yalnızca oturum açan kullanıcıya açıktır. */
+.login-main { display: flex; justify-content: center; padding: 48px 16px 72px }
+.login-card { width: 100%; max-width: 420px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 14px; padding: 28px; box-shadow: var(--shadow-sm); display: grid; gap: 12px }
+.login-card h1 { margin: 0; font-size: 1.4rem; color: var(--color-text-strong) }
+.login-lede { margin: 0 0 4px; font-size: .88rem; color: var(--color-text-muted) }
+.login-card label { display: grid; gap: 6px; font-size: .85rem; font-weight: 600; color: var(--color-text-strong) }
+.login-card input { padding: 10px 12px; border: 1px solid var(--color-border-strong); border-radius: 8px; background: var(--color-surface); font: inherit }
+.login-card .error:empty { display: none }
+.range-pick { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: .82rem; color: var(--color-text-muted) }
+.range-pick input { padding: 6px 8px; border: 1px solid var(--color-border-strong); border-radius: 8px; background: var(--color-surface); font: inherit }
+.grid-title { margin: 18px 24px 6px; font-size: 1rem; color: var(--color-text-strong) }
+.grid-title:first-child { margin-top: 0 }
+.grid-note { margin: 12px 24px; font-size: .82rem; color: var(--color-text-muted) }
+.hero-stats strong { font: 800 1.8rem/1 var(--font-display); color: var(--color-brand); font-variant-numeric: tabular-nums }
+.hero-stats span { font-size: .78rem; color: var(--color-text-muted); margin-top: 6px }
+.hero-stats small { grid-column: 1 / -1; font-size: .76rem; color: var(--color-text-muted) }
+
+/* --- Çalışma alanı ----------------------------------------------------- */
+.workspace { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 24px; padding: 40px 0 72px; align-items: start }
+aside { display: grid; gap: 8px; position: sticky; top: 92px }
+aside label { font-family: var(--font-display); font-size: .82rem; font-weight: 650; color: var(--color-text-strong); margin-top: 8px }
+aside input, aside select { width: 100%; min-height: 44px; border: 1px solid var(--color-border-strong); border-radius: 6px; padding: 9px 12px; background: var(--color-surface) }
+aside input:focus, aside select:focus { border-color: var(--color-brand); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand) 14%, transparent) }
+.check { display: flex; align-items: center; gap: 9px; font-weight: 400; font-size: .86rem; color: var(--color-text) }
+.check input { width: auto; min-height: auto; accent-color: var(--color-brand) }
+#clear { justify-self: start; margin-top: 14px }
+.aside-note { margin-top: 22px; padding: 18px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-bg-brand-tint) }
+.aside-note p { font-size: .85rem; margin: 0 0 10px }
+.aside-note p:last-child { margin-bottom: 0 }
+.aside-note input { font-size: .76rem; background: var(--color-surface); margin-bottom: 10px }
+.aside-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap }
+.aside-actions .button { min-height: 38px; padding: 7px 14px; font-size: .85rem }
+
+/* --- Takvim paneli ----------------------------------------------------- */
+.calendar-panel { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 12px; box-shadow: var(--shadow-sm); overflow: hidden }
+.panel-head { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 22px 24px; border-bottom: 1px solid var(--color-border); flex-wrap: wrap }
+.panel-head h2 { margin: 0; text-transform: capitalize }
+.panel-actions { display: flex; gap: 10px; flex-wrap: wrap }
+.calendar-controls { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 14px 24px; background: var(--color-bg-subtle); border-bottom: 1px solid var(--color-border); flex-wrap: wrap }
+.nav, .view-toggle { display: flex; gap: 6px }
+.nav button, .view-toggle button { min-height: 38px; min-width: 40px; padding: 6px 14px; border: 1px solid var(--color-border-strong); border-radius: 6px; background: var(--color-surface); font-family: var(--font-display); font-weight: 650; font-size: .88rem; cursor: pointer }
+.nav button:hover, .view-toggle button:hover { border-color: var(--color-brand); color: var(--color-brand) }
+.pickers { display: flex; gap: 6px; flex-wrap: wrap }
+.pickers select { min-height: 38px; border: 1px solid var(--color-border-strong); border-radius: 6px; padding: 6px 10px; background: var(--color-surface); font-family: var(--font-display); font-weight: 600; font-size: .88rem; max-width: 100% }
+.day-more { border: 0; background: none; padding: 2px 4px; text-align: left; color: var(--color-brand); font-size: .72rem; font-weight: 700; cursor: pointer }
+.day-more:hover { text-decoration: underline }
+.search-results { border-top: 1px solid var(--color-border) }
+.search-results h3 { margin: 0; padding: 18px 24px 6px; font-size: 1rem; color: var(--color-text-strong) }
+.view-toggle button[aria-pressed="true"] { background: var(--color-text-strong); border-color: var(--color-text-strong); color: #fff }
+#status { margin: 0; padding: 0 24px; color: var(--color-text-muted); font-size: .85rem }
+#status:not(:empty) { padding: 14px 24px; color: var(--color-danger) }
+
+.week { display: grid; grid-template-columns: repeat(7, 1fr); padding: 12px 24px 0; font-family: var(--font-display); font-size: .7rem; font-weight: 700; letter-spacing: .1em; color: var(--color-text-muted) }
+.week span { padding-bottom: 8px }
+.grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px; background: var(--color-border); border-top: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border) }
+.day { background: var(--color-surface); min-height: 118px; padding: 8px 8px 10px; display: flex; flex-direction: column; gap: 4px }
+.day.outside { background: var(--color-bg-subtle) }
+.day.outside .day-number { color: var(--color-cool-gray, #939598); opacity: .65 }
+.day-number { font-family: var(--font-display); font-size: .8rem; font-weight: 700; color: var(--color-text-strong) }
+.day.is-today { box-shadow: inset 0 0 0 2px var(--color-brand) }
+.day.is-today .day-number { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 9999px; background: var(--color-brand); color: #fff }
+.today-key { display: inline-block; width: 12px; height: 12px; border-radius: 3px; border: 2px solid var(--color-brand); vertical-align: -2px; margin-right: 6px }
+
+.event-chip { display: block; width: 100%; text-align: left; border: 0; border-left: 3px solid var(--color-brand); border-radius: 4px; background: var(--color-bg-brand-tint); color: var(--color-brand-active); padding: 4px 6px; font-size: .72rem; line-height: 1.32; font-weight: 600; cursor: pointer; overflow: hidden }
+.event-chip:hover { background: var(--color-brand); color: #fff }
+.event-chip span { display: block; font-weight: 400; opacity: .85 }
+.event-chip.is-ertelendi { border-left-color: var(--color-warning); background: color-mix(in srgb, var(--color-warning) 10%, var(--color-surface)); color: var(--color-warning) }
+.event-chip.is-iptal { border-left-color: var(--color-cool-gray, #939598); background: var(--color-bg-subtle); color: var(--color-text-muted); text-decoration: line-through }
+/* Planlanan gri, tamamlanan (varsayılan) kırmızı. */
+.event-chip.is-planlandi { border-left-color: var(--color-cool-gray, #939598); background: color-mix(in srgb, var(--color-cool-gray, #939598) 16%, var(--color-surface)); color: var(--color-text-strong) }
+.event-chip.is-planlandi:hover { background: var(--color-text-strong); color: #fff }
+.legend { display: flex; gap: 6px 16px; flex-wrap: wrap }
+.status-key { display: inline-block; width: 12px; height: 12px; border-radius: 3px; background: var(--color-brand); vertical-align: -2px; margin-right: 6px }
+.status-key.is-planlandi { background: var(--color-cool-gray, #939598) }
+.status-key.is-ertelendi { background: var(--color-warning) }
+
+#agenda { padding: 8px 0 }
+.agenda-item { display: grid; grid-template-columns: 78px 1fr; gap: 18px; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--color-border); background: none; padding: 16px 24px; cursor: pointer }
+.agenda-item:hover { background: var(--color-bg-subtle) }
+.agenda-date { display: grid; place-content: center; text-align: center; border-radius: 8px; background: var(--color-bg-brand-tint); color: var(--color-brand); padding: 8px; font-family: var(--font-display); font-weight: 800; font-size: .95rem; font-variant-numeric: tabular-nums }
+.agenda-date small { display: block; font-size: .72rem; font-weight: 600; opacity: .85 }
+.agenda-item.is-planlandi .agenda-date { background: color-mix(in srgb, var(--color-cool-gray, #939598) 16%, var(--color-surface)); color: var(--color-text-strong) }
+.agenda-body strong { display: block; color: var(--color-text-strong); font-size: 1rem }
+.agenda-body small { display: block; color: var(--color-text-muted); font-size: .82rem; margin-top: 2px }
+.empty { padding: 56px 24px; text-align: center; color: var(--color-text-muted) }
+.calendar-footer { display: flex; justify-content: space-between; gap: 16px; padding: 14px 24px; font-size: .8rem; color: var(--color-text-muted); background: var(--color-bg-subtle); border-top: 1px solid var(--color-border) }
+
+/* --- Alt bant ---------------------------------------------------------- */
+.site-footer { background: linear-gradient(115deg, var(--color-brand-active), var(--color-brand)); color: color-mix(in srgb, #fff 88%, transparent); padding: 40px 0 }
+.footer-inner { display: flex; align-items: center; gap: 20px; flex-wrap: wrap }
+.footer-inner p { margin: 0; font-size: .9rem }
+.brand-inverse, .brand-inverse .brand-accent { color: #fff }
+
+/* --- Kutular ----------------------------------------------------------- */
+dialog { width: min(620px, calc(100% - 32px)); border: 1px solid var(--color-border); border-radius: 16px; padding: 28px; box-shadow: var(--shadow-lg); color: var(--color-text); background: var(--color-surface) }
+dialog::backdrop { background: rgba(65,64,66,.45) }
+dialog form { display: grid; gap: 16px }
+.dialog-top { display: flex; justify-content: space-between; align-items: start; gap: 16px }
+.dialog-top h2, .dialog-top .eyebrow { margin: 0 }
+.close { border: 0; background: none; font-size: 1.6rem; line-height: 1; color: var(--color-text-muted); cursor: pointer; padding: 0 4px }
+.close:hover { color: var(--color-brand) }
+dialog label { display: grid; gap: 6px; font-family: var(--font-display); font-size: .88rem; font-weight: 650; color: var(--color-text-strong) }
+dialog label small { font-weight: 400; color: var(--color-text-muted) }
+dialog input, dialog select, dialog textarea { width: 100%; min-height: 44px; border: 1px solid var(--color-border-strong); border-radius: 6px; padding: 9px 12px; background: var(--color-surface) }
+dialog input:focus, dialog select:focus, dialog textarea:focus { border-color: var(--color-brand); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand) 14%, transparent) }
+dialog textarea { resize: vertical }
+dialog .check { font-family: var(--font-display); font-weight: 650; color: var(--color-text-strong) }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px }
+.form-row-3 { grid-template-columns: repeat(3, 1fr) }
+.choice { border: 0; margin: 0; padding: 0; min-width: 0; display: grid; gap: 8px }
+.choice legend { font-family: var(--font-display); font-size: .88rem; font-weight: 650; color: var(--color-text-strong); padding: 0; margin-bottom: 8px }
+.choice legend small { font-weight: 400; color: var(--color-text-muted) }
+.choice-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px }
+dialog label.choice-card { display: flex; align-items: center; gap: 8px; border: 1px solid var(--color-border-strong); border-radius: 8px; padding: 10px 12px; font-size: .85rem; line-height: 1.25; cursor: pointer }
+dialog label.choice-card:hover { border-color: var(--color-brand) }
+dialog label.choice-card:has(input:checked) { border-color: var(--color-brand); background: var(--color-bg-brand-tint); box-shadow: 0 0 0 1px var(--color-brand) }
+dialog label.choice-card:has(input:disabled) { opacity: .5; cursor: not-allowed }
+.check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 2px 12px }
+.check-scroll { max-height: 220px; overflow-y: auto; border: 1px solid var(--color-border); border-radius: 8px; padding: 8px 10px }
+dialog .check-grid label { display: flex; align-items: center; gap: 8px; font-weight: 400; font-size: .85rem; padding: 3px 0 }
+dialog .check-grid label.is-passive { color: var(--color-text-muted); cursor: not-allowed }
+dialog .choice input[type="radio"], dialog .choice input[type="checkbox"] { width: auto; min-height: auto; margin: 0; accent-color: var(--color-brand) }
+.error:empty { display: none }
+.error { margin: 0; padding: 12px 14px; border: 1px solid var(--color-danger); border-radius: 8px; background: color-mix(in srgb, var(--color-danger) 8%, var(--color-surface)); color: var(--color-danger); font-size: .88rem }
+.detail-list { display: grid; gap: 10px; margin: 0 0 18px; padding: 16px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-bg-subtle); font-size: .9rem }
+.detail-list > div { display: grid; grid-template-columns: 120px 1fr; gap: 12px }
+.detail-list dt { font-family: var(--font-display); font-weight: 700; color: var(--color-text-strong) }
+.detail-list dd { margin: 0 }
+.detail-block { margin: 0 0 16px }
+.detail-block h3 { margin: 0 0 6px; font-family: var(--font-display); font-size: .76rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--color-text-muted) }
+.detail-block p { margin: 0; white-space: pre-wrap }
+.detail-block ul { margin: 0; padding-left: 18px }
+.photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; margin: 0 0 16px }
+.photo-grid img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; border: 1px solid var(--color-border) }
+/* Formdaki "+ ekle" düğmeleri, fotoğraf önizlemeleri ve paydaş satırları */
+.inline-add { justify-self: start; min-height: 38px; padding: 7px 14px; font-size: .85rem }
+.partner-rows { display: grid; gap: 8px }
+.partner-rows:empty { display: none }
+.partner-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: center }
+.partner-row button { width: 40px; min-height: 44px; border: 1px solid var(--color-border-strong); border-radius: 6px; background: var(--color-surface); font-size: 1.2rem; cursor: pointer }
+.partner-row button:hover { border-color: var(--color-danger); color: var(--color-danger) }
+.photo-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px }
+.photo-list:empty { display: none }
+.photo-thumb { position: relative; aspect-ratio: 1; border-radius: 8px; overflow: hidden; border: 1px solid var(--color-border) }
+.photo-thumb img { display: block; width: 100%; height: 100%; object-fit: cover }
+.photo-thumb button { position: absolute; top: 4px; right: 4px; width: 28px; height: 28px; border: 0; border-radius: 9999px; background: rgba(0,0,0,.62); color: #fff; font-size: 1.05rem; line-height: 1; cursor: pointer }
+.status-badge { display: inline-block; width: max-content; border-radius: 4px; padding: 4px 10px; font-family: var(--font-display); font-size: .78rem; font-weight: 700; background: color-mix(in srgb, var(--color-warning) 12%, var(--color-surface)); color: var(--color-warning); margin: 0 0 14px }
+.status-badge.is-tamamlandi { background: var(--color-bg-brand-tint); color: var(--color-brand-active) }
+.status-badge.is-iptal { background: color-mix(in srgb, var(--color-danger) 10%, var(--color-surface)); color: var(--color-danger) }
+.detail-actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 20px }
+
+/* --- Kullanıcı yönetimi ------------------------------------------------ */
+dialog.wide { width: min(860px, calc(100% - 32px)) }
+.dialog-lede { font-size: .9rem; color: var(--color-text-muted); margin: 4px 0 20px }
+.users-list { border: 1px solid var(--color-border); border-radius: 10px; overflow: hidden }
+.user-row { display: grid; grid-template-columns: minmax(140px, 1fr) 190px auto; gap: 14px; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--color-border) }
+.user-row:last-child { border-bottom: 0 }
+.user-row:nth-child(even) { background: var(--color-bg-subtle) }
+.user-row strong { display: block; color: var(--color-text-strong); font-family: var(--font-display) }
+.user-row small { display: block; color: var(--color-text-muted); font-size: .76rem }
+.user-row select { min-height: 38px; border: 1px solid var(--color-border-strong); border-radius: 6px; padding: 6px 8px; background: var(--color-surface); font-size: .85rem; width: 100% }
+.user-actions { display: flex; gap: 8px; justify-content: flex-end }
+.user-actions button { min-height: 36px; padding: 6px 12px; font-size: .82rem; border-radius: 6px; border: 1px solid var(--color-border-strong); background: var(--color-surface); font-family: var(--font-display); font-weight: 600; cursor: pointer }
+.user-actions button:hover { border-color: var(--color-brand); color: var(--color-brand) }
+.user-actions .danger:hover { border-color: var(--color-danger); background: var(--color-danger); color: #fff }
+.role-badge { display: inline-block; border-radius: 4px; padding: 2px 8px; font-size: .72rem; font-weight: 700; background: var(--color-bg-brand-tint); color: var(--color-brand-active) }
+.user-form { margin-bottom: 22px; padding-bottom: 22px; border-bottom: 1px solid var(--color-border) }
+.user-form small { display: block; font-weight: 400; color: var(--color-text-muted); font-size: .76rem; margin-top: 2px }
+.password-row { display: flex; gap: 10px }
+.password-row input { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace }
+.password-row .button { white-space: nowrap; min-height: 44px }
+
+@media (max-width: 1040px) {
+  .hero-inner { grid-template-columns: 1fr; gap: 28px }
+  .workspace { grid-template-columns: 1fr }
+  aside { position: static }
+}
+@media (max-width: 720px) {
+  .container { width: calc(100% - 28px) }
+  .page-hero { padding: 36px 0 32px }
+  .grid { gap: 0; grid-template-columns: 1fr; border: 0 }
+  .week { display: none }
+  .day { min-height: 0; border-bottom: 1px solid var(--color-border); flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px }
+  .day:not(:has(.event-chip)) { display: none }
+  .day .event-chip { width: auto; flex: 1 1 100% }
+  .form-row { grid-template-columns: 1fr }
+  .detail-list > div { grid-template-columns: 1fr; gap: 2px }
+}
