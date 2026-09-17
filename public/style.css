@@ -121,6 +121,9 @@ p { margin-top: 0 }
 .hero-stats strong { font: 800 1.8rem/1 var(--font-display); color: var(--color-brand); font-variant-numeric: tabular-nums }
 .hero-stats span { font-size: .78rem; color: var(--color-text-muted); margin-top: 6px }
 .hero-stats small { grid-column: 1 / -1; font-size: .76rem; color: var(--color-text-muted) }
+/* Döküm başlıkları sayaçların büyük rakam stilini almasın. */
+.hero-stats .partner-item strong { font: 700 .9rem/1.3 var(--font-body); color: var(--color-text-strong) }
+.hero-stats .partner-item small { grid-column: auto; font-size: .76rem }
 
 /* --- Çalışma alanı ----------------------------------------------------- */
 .workspace { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 24px; padding: 40px 0 72px; align-items: start }
