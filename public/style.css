@@ -267,6 +267,7 @@ dialog .choice input[type="radio"], dialog .choice input[type="checkbox"] { widt
 /* --- Kullanıcı yönetimi ------------------------------------------------ */
 dialog.wide { width: min(860px, calc(100% - 32px)) }
 .dialog-lede { font-size: .9rem; color: var(--color-text-muted); margin: 4px 0 20px }
+#users-search { width: 100%; margin: 0 0 10px; border: 1px solid var(--color-border-strong); border-radius: 6px; padding: 8px 12px; background: var(--color-surface) }
 .users-list { border: 1px solid var(--color-border); border-radius: 10px; overflow: hidden }
 .user-row { display: grid; grid-template-columns: minmax(140px, 1fr) 190px auto; gap: 14px; align-items: center; padding: 14px 16px; border-bottom: 1px solid var(--color-border) }
 .user-row:last-child { border-bottom: 0 }

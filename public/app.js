@@ -626,16 +626,29 @@ const fullName = row => [row.first_name, row.last_name].filter(Boolean).join(' '
 let userRows = [];
 
 async function loadUsers() {
-  const rows = userRows = await api('api/users');
+  userRows = await api('api/users');
+  renderUsers();
+}
+
+/** Hesap listesi; arama kutusu ad, soyad, T.C. numarası ve il üzerinde çalışır. */
+function renderUsers() {
+  const query = $('#users-search').value.trim().toLocaleLowerCase('tr-TR');
+  const rows = query
+    ? userRows.filter(row => [fullName(row), row.username, row.city || 'Merkez'].join(' ').toLocaleLowerCase('tr-TR').includes(query))
+    : userRows;
+  $('#users-count').textContent = query ? `${rows.length} / ${userRows.length} hesap` : `${userRows.length} hesap`;
   const cityOptions = ['', ...[...meta.cities].sort((a, b) => a.localeCompare(b, 'tr'))];
-  $('#users-list').innerHTML = rows.map(row => `<div class="user-row" data-user="${row.id}">
+  $('#users-list').innerHTML = rows.length ? rows.map(row => `<div class="user-row" data-user="${row.id}">
     <div><strong>${escapeHtml(fullName(row) || row.username)}</strong><small>${fullName(row) ? escapeHtml(row.username) + ' · ' : 'ad soyad girilmemiş · '}${row.events} etkinlik${row.sessions ? ' · oturumu açık' : ''}${row.self ? ' · bu hesap sizsiniz' : ''}</small></div>
     <div>${row.self
       ? `<span class="role-badge">Merkez yöneticisi</span>`
       : `<select data-role="city" aria-label="${escapeHtml(row.username)} yetki alanı">${cityOptions.map(city => `<option value="${escapeHtml(city)}"${city === (row.city || '') ? ' selected' : ''}>${city ? escapeHtml(city) : 'Merkez (tüm iller)'}</option>`).join('')}</select>`}</div>
     <div class="user-actions"><button type="button" data-role="rename">Ad soyad</button>${row.self ? '' : `<button type="button" data-role="reset">Parola ver</button><button type="button" class="danger" data-role="remove">Sil</button>`}</div>
-  </div>`).join('');
+  </div>`).join('') : '<div class="user-row">Aramanızla eşleşen hesap yok.</div>';
 }
+
+$('#users-search').addEventListener('input', () => { if (userRows.length) renderUsers(); });
+$('#users-search').addEventListener('keydown', event => { if (event.key === 'Enter') event.preventDefault(); });
 
 async function usersAction(target) {
   const row = target.closest('[data-user]');
@@ -729,6 +742,8 @@ $('#users-button').onclick = async () => {
   const form = $('#user-form');
   form.reset();
   form.querySelector('.error').textContent = '';
+  $('#users-search').value = '';
+  $('#users-count').textContent = '';
   $('#users-error').textContent = '';
   $('#users-list').innerHTML = '<div class="user-row">Yükleniyor…</div>';
   $('#users-dialog').showModal();
