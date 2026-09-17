@@ -244,11 +244,13 @@ function monthGrid(first, list, titled) {
   return html + '</div>';
 }
 
-/** Kaydı giren: "Ankara / Tugay Şahin"; adı girilmemiş hesapta yalnızca ili. */
-const ownerLabel = e => [e.owner_city || 'Merkez', e.owner_name].filter(Boolean).join(' / ');
+/** Kaydı giren: "Ankara / Tugay Şahin"; adı girilmemiş hesapta yalnızca yetki alanı. */
+/* Merkez yöneticisinin yetki alanı bir il değil; listelerde YEĞİTEK yazar. */
+const ownerCity = e => e.owner_city || 'YEĞİTEK';
+const ownerLabel = e => [ownerCity(e), e.owner_name].filter(Boolean).join(' / ');
 
 /* `note`: başlığın yanında vurgulanan kısa bilgi (ör. katılımcı sayısı). */
-const resultItem = (e, note) => `<button class="agenda-item ${statusClass(e.status)}" data-event="${e.id}"><span class="agenda-date">${escapeHtml(e.start.slice(8, 10) + '.' + e.start.slice(5, 7))}<small>${escapeHtml(e.start.slice(0, 4))}</small></span><span class="agenda-body"><strong>${escapeHtml(e.title)}${typeof note === 'string' ? ` <em class="agenda-note">${escapeHtml(note)}</em>` : ''}</strong><small>${escapeHtml([e.city, e.category, subtypeLabel(e), locationLabel(e)].join(' · '))}</small><small>${escapeHtml(e.status)} · ${escapeHtml(ownerLabel(e))}</small></span></button>`;
+const resultItem = (e, note) => `<button class="agenda-item ${statusClass(e.status)}" data-event="${e.id}"><span class="agenda-date">${escapeHtml(e.start.slice(8, 10) + '.' + e.start.slice(5, 7))}<small>${escapeHtml(e.start.slice(0, 4))}</small></span><span class="agenda-body"><strong>${escapeHtml(e.title)}${typeof note === 'string' ? ` <em class="agenda-note">${escapeHtml(note)}</em>` : ''}</strong><small>${escapeHtml([e.city, e.category, subtypeLabel(e), locationLabel(e)].join(' · '))}</small><small>${escapeHtml(e.status)} · Giren: ${escapeHtml(ownerLabel(e))}</small></span></button>`;
 
 /** Üstteki sayaç kutularından biri açıksa, o sayının hangi il / çalışma grubu /
     etkinlik türünden oluştuğunu adetleriyle listeler. Bir değere tıklamak
@@ -260,7 +262,8 @@ const statFilters = {
   /* `all`: hiç etkinliği olmayan türler de listelenir (0 adetle). */
   done: { select: '#category', label: 'Tamamlanan etkinlikler, türlerine göre', subset: e => e.status === 'Tamamlandı', values: e => [e.category], all: () => meta.categories },
   upcoming: { select: '#category', label: 'Planlanan ve ertelenen etkinlikler, türlerine göre', subset: e => e.status === 'Planlandı' || e.status === 'Ertelendi', values: e => [e.category], all: () => meta.categories },
-  cities: { select: '#city', label: 'İllere göre etkinlik sayısı', values: e => listOf(e.cities), distinct: true },
+  /* Etkinliğin yapıldığı il değil, kaydı giren hesabın yetki alanı sayılır. */
+  cities: { select: '#city', label: 'Etkinliği giren ile göre etkinlikler', values: e => [ownerCity(e)], distinct: true, byOwnerCity: true },
   themes: { select: '#theme', label: 'Çalışma grupları ve ait oldukları etkinlikler', values: groupsOf, distinct: true, byGroup: true },
   /* `byEvent`: il yerine her etkinliğin kendi katılımcı sayısı; tıklamak etkinliği açar. */
   students: { select: '#city', label: 'Etkinliklere göre katılan öğrenci sayısı', values: placesOf, weight: e => e.students || 0, byEvent: true },
@@ -308,8 +311,14 @@ function renderBreakdown() {
   const box = $('#stat-breakdown');
   box.hidden = !openStat;
   if (!openStat) return;
-  const { select, label, subset = () => true, values, weight, all, byEvent, byPartner, byGroup } = statFilters[openStat];
+  const { select, label, subset = () => true, values, weight, all, byEvent, byPartner, byGroup, byOwnerCity } = statFilters[openStat];
   const list = (onlyMonth ? shownEvents(select) : filtered(allEvents, select)).filter(subset);
+  if (byOwnerCity) {
+    const owners = new Map();
+    for (const e of list) owners.set(ownerCity(e), (owners.get(ownerCity(e)) || new Set()).add(e));
+    box.innerHTML = groupedEvents(label, [...owners].map(([name, joined]) => [name, joined]), 'Gösterilecek etkinlik yok.', true);
+    return;
+  }
   if (byGroup) {
     const groups = new Map();
     for (const e of list) for (const group of groupsOf(e)) groups.set(group, (groups.get(group) || new Set()).add(e));
