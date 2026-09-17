@@ -255,10 +255,12 @@ const statFilters = {
   done: { select: '#category', label: 'Tamamlanan etkinlikler, türlerine göre', subset: e => e.status === 'Tamamlandı', values: e => [e.category], all: () => meta.categories },
   upcoming: { select: '#category', label: 'Planlanan ve ertelenen etkinlikler, türlerine göre', subset: e => e.status === 'Planlandı' || e.status === 'Ertelendi', values: e => [e.category], all: () => meta.categories },
   cities: { select: '#city', label: 'İllere göre etkinlik sayısı', values: e => listOf(e.cities), distinct: true },
-  themes: { select: '#theme', label: 'Çalışma gruplarına göre etkinlik sayısı', values: groupsOf, distinct: true },
-  students: { select: '#city', label: 'Kapsam ve illere göre öğrenci sayısı (ortak il etkinliği her ilinde sayılır)', values: placesOf, weight: e => e.students || 0 },
-  teachers: { select: '#city', label: 'Kapsam ve illere göre öğretmen sayısı (ortak il etkinliği her ilinde sayılır)', values: placesOf, weight: e => e.teachers || 0 },
-  stakeholders: { select: '#city', label: 'Kapsam ve illere göre paydaş / işbirliği yapılan kurum sayısı (ortak il etkinliği her ilinde sayılır)', values: placesOf, weight: e => partnersOf(e).length },
+  themes: { select: '#theme', label: 'Çalışma grupları ve ait oldukları etkinlikler', values: groupsOf, distinct: true, byGroup: true },
+  /* `byEvent`: il yerine her etkinliğin kendi katılımcı sayısı; tıklamak etkinliği açar. */
+  students: { select: '#city', label: 'Etkinliklere göre katılan öğrenci sayısı', values: placesOf, weight: e => e.students || 0, byEvent: true },
+  teachers: { select: '#city', label: 'Etkinliklere göre katılan öğretmen sayısı', values: placesOf, weight: e => e.teachers || 0, byEvent: true },
+  /* `byPartner`: her paydaş kurum (kurum adı yoksa kişi) ve katıldığı etkinlikler. */
+  stakeholders: { select: '#city', label: 'Paydaş / işbirliği yapılan kurumlar ve katıldıkları etkinlikler', values: placesOf, weight: e => partnersOf(e).length, byPartner: true },
 };
 
 /** Kartın büyük sayısı: farklı il / grup adedi, kişi / paydaş toplamı ya da etkinlik adedi. */
@@ -268,13 +270,50 @@ function statTotal(stat, list) {
   return list.filter(stat.subset).length;
 }
 
+/** Başlık (kurum / çalışma grubu) altında o başlığa ait etkinlik düğmeleri; en kalabalık başlık başta. */
+function groupedEvents(label, rows, empty) {
+  rows.sort((a, b) => b[1].size - a[1].size || a[0].localeCompare(b[0], 'tr'));
+  const pill = e => `<button type="button" class="stat-pill" data-event="${e.id}">${escapeHtml(e.title)} <b>${escapeHtml(e.start.slice(8, 10) + '.' + e.start.slice(5, 7) + '.' + e.start.slice(0, 4))}</b></button>`;
+  return `<p>${label} · etkinliğe tıklayarak ayrıntıyı açın</p>`
+    + (rows.length
+      ? `<div class="partner-list">${rows.map(([name, joined, note]) => `<div class="partner-item"><strong>${escapeHtml(name)}</strong>`
+          + (note ? ` <small>(${escapeHtml(note)})</small>` : '')
+          + ` <small>· ${joined.size} etkinlik</small><div class="stat-pills">${[...joined].sort((a, b) => b.start.localeCompare(a.start)).map(pill).join('')}</div></div>`).join('')}</div>`
+      : `<p>${empty}</p>`);
+}
+
 function renderBreakdown() {
   for (const button of document.querySelectorAll('[data-stat]')) button.setAttribute('aria-expanded', String(button.dataset.stat === openStat));
   const box = $('#stat-breakdown');
   box.hidden = !openStat;
   if (!openStat) return;
-  const { select, label, subset = () => true, values, weight, all } = statFilters[openStat];
+  const { select, label, subset = () => true, values, weight, all, byEvent, byPartner, byGroup } = statFilters[openStat];
   const list = (onlyMonth ? shownEvents(select) : filtered(allEvents, select)).filter(subset);
+  if (byGroup) {
+    const groups = new Map();
+    for (const e of list) for (const group of groupsOf(e)) groups.set(group, (groups.get(group) || new Set()).add(e));
+    box.innerHTML = groupedEvents(label, [...groups].map(([name, joined]) => [name, joined]), 'Gösterilecek çalışma grubu yok.');
+    return;
+  }
+  if (byPartner) {
+    const partners = new Map();
+    for (const e of list) for (const p of partnersOf(e)) {
+      const name = p.org || p.person, entry = partners.get(name) || { events: new Set(), people: new Set() };
+      entry.events.add(e);
+      if (p.org && p.person) entry.people.add(p.person);
+      partners.set(name, entry);
+    }
+    box.innerHTML = groupedEvents(label, [...partners].map(([name, { events: joined, people }]) => [name, joined, [...people].join(', ')]), 'Gösterilecek paydaş yok.');
+    return;
+  }
+  if (byEvent) {
+    const rows = list.filter(e => weight(e) > 0).sort((a, b) => weight(b) - weight(a) || b.start.localeCompare(a.start));
+    box.innerHTML = `<p>${label} · ayrıntı için tıklayın</p>`
+      + (rows.length
+        ? `<div class="stat-pills">${rows.map(e => `<button type="button" class="stat-pill" data-event="${e.id}" title="${escapeHtml([e.start.slice(0, 10), placeLabel(e)].join(' · '))}">${escapeHtml(e.title)} <b>${weight(e).toLocaleString('tr-TR')}</b></button>`).join('')}</div>`
+        : '<p>Gösterilecek etkinlik yok.</p>');
+    return;
+  }
   const counts = new Map(all ? all().map(value => [value, 0]) : []);
   for (const e of list) for (const value of values(e)) counts.set(value, (counts.get(value) || 0) + (weight ? weight(e) : 1));
   const rows = [...counts].filter(([, count]) => count > 0 || all).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'tr'));

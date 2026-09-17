@@ -96,6 +96,10 @@ p { margin-top: 0 }
 .stat-pill:hover { border-color: var(--color-brand); color: var(--color-brand) }
 .stat-pill[aria-pressed="true"] { background: var(--color-brand); border-color: var(--color-brand); color: #fff }
 .stat-pill[aria-pressed="true"] b { color: #fff }
+.partner-list { display: grid; gap: 10px }
+.partner-item { padding-bottom: 10px; border-bottom: 1px solid var(--color-border) }
+.partner-item:last-child { border-bottom: 0; padding-bottom: 0 }
+.partner-item > .stat-pills { margin-top: 6px }
 .stat-events { margin-top: 12px; border-top: 1px solid var(--color-border) }
 .stat-events > p { margin: 10px 0 0 }
 .stat-events .agenda-item { grid-template-columns: 62px 1fr; gap: 12px; padding: 10px 2px }
