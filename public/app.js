@@ -298,7 +298,7 @@ function groupedEvents(label, rows, empty, boxes = false) {
       + ` <small>· ${joined.size} etkinlik</small><div class="${boxes ? 'stat-events' : 'stat-pills'}">${inner.html}</div>${inner.more}</div>`;
   };
   const outer = limited(openStat, rows, item);
-  return `<p>${label}</p>`
+  return `<p>${label} · etkinliğe tıklayarak ayrıntıyı açın</p>`
     + (rows.length ? `<div class="partner-list">${outer.html}</div>${outer.more}` : `<p>${empty}</p>`);
 }
 
