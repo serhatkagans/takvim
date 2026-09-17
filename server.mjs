@@ -154,6 +154,13 @@ function tooManyAttempts(keys) {
   return false;
 }
 
+/* İl yöneticisi kendi ilini İÇEREN etkinlikleri yönetir — kaydı kimin açtığına
+   bakılmaz: koordinatör değişince ilin eski kayıtları sahipsiz kalmasın. İle
+   bağlı olmayan (ulusal / uluslararası) kayıtta ise yalnızca kendi açtığını
+   yönetebilir; merkez yöneticisi hepsini yönetir. */
+const canManage = (user, event) => !user.city
+  || (listOf(event.cities).length ? listOf(event.cities).includes(user.city) : event.owner === user.id);
+
 const liveEvents = (where, params) => db.all(`SELECT ${FIELDS} FROM events WHERE deleted_at IS NULL AND ${where} ORDER BY start`, params);
 
 const server = createServer(async (req, res) => {
@@ -333,11 +340,11 @@ const server = createServer(async (req, res) => {
     const photoPath = url.pathname.match(/^\/api\/events\/(\d{1,9})\/photos(?:\/(\d{1,9}))?$/);
     if (photoPath) {
       const eventId = Number(photoPath[1]), photoId = Number(photoPath[2]);
-      const target = await db.get('SELECT cities FROM events WHERE id=? AND deleted_at IS NULL', [eventId]);
+      const target = await db.get('SELECT cities,owner FROM events WHERE id=? AND deleted_at IS NULL', [eventId]);
       if (!target) return send(res, 404, { error: 'Etkinlik bulunamadı.' });
       if (!user) return send(res, 401, { error: 'Önce giriş yapın.' });
       if (req.method === 'GET' && !photoId) return send(res, 200, await db.all('SELECT id FROM photos WHERE event_id=? ORDER BY id', [eventId]));
-      if (user.city && !listOf(target.cities).includes(user.city)) return send(res, 403, { error: 'Bu etkinlik için yetkiniz yok.' });
+      if (!canManage(user, target)) return send(res, 403, { error: 'Bu etkinlik için yetkiniz yok.' });
       if (req.method === 'POST' && !photoId) {
         const data = await rawBody(req, MAX_PHOTO_BYTES);
         const type = photoType(data);
@@ -363,12 +370,9 @@ const server = createServer(async (req, res) => {
       const now = new Date().toISOString();
       let previous;
       if (id) {
-        previous = await db.get('SELECT cities,updated FROM events WHERE id=? AND deleted_at IS NULL', [id]);
+        previous = await db.get('SELECT cities,owner,updated FROM events WHERE id=? AND deleted_at IS NULL', [id]);
         if (!previous) return send(res, 404, { error: 'Etkinlik bulunamadı.' });
-        /* İl yöneticisi kendi ilini İÇEREN etkinlikleri yönetir — kaydı kimin
-           açtığına bakılmaz: koordinatör değişince ilin eski kayıtları
-           sahipsiz kalmasın. Kim eklediği yalnızca süzgeçte kullanılır. */
-        if (user.city && !listOf(previous.cities).includes(user.city)) return send(res, 403, { error: 'Bu etkinlik için yetkiniz yok.' });
+        if (!canManage(user, previous)) return send(res, 403, { error: 'Bu etkinlik için yetkiniz yok.' });
       }
       if (req.method === 'DELETE') {
         /* Kalıcı silme yerine işaretleme: yanlışlıkla silinen bir etkinlik

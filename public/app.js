@@ -418,7 +418,10 @@ function showEvent(id) {
   $('#export').href = `takvim.ics?id=${selected.id}`;
   /* İl yöneticisi kendi ilini içeren etkinlikleri yönetir; yetkisi olmayan
      kayıtta düğmeler hiç görünmez (sunucu da aynı kuralı uygular). */
-  const canManage = !!meta.user && (meta.user.central || listOf(selected.cities).includes(meta.user.city));
+  /* Sunucudaki kuralın aynısı (bkz. server.mjs, canManage): il yöneticisi
+     kendi ilini içeren kayıtları, ile bağlı olmayanlardan ise kendi açtığını yönetir. */
+  const canManage = !!meta.user && (meta.user.central
+    || (listOf(selected.cities).length ? listOf(selected.cities).includes(meta.user.city) : selected.owner === meta.user.id));
   $('#edit').hidden = $('#delete').hidden = !canManage;
   $('#detail-dialog .error').textContent = '';
   $('#detail-dialog').showModal();
@@ -546,9 +549,7 @@ function editEvent(event) {
   partnersOf(value).forEach(addPartnerRow);
   form.elements.online.value = value.online ? '1' : '0';
   const chosen = listOf(value.cities);
-  /* İl yöneticisi yalnızca kendi ilini içeren bölgesel / yerel etkinlik
-     kaydeder: kendi ili kilitlenir, ulusal ve uluslararası kapsam kapanır. */
-  for (const input of form.elements.scope) input.disabled = !!own && input.value !== meta.scopes[2];
+  /* İl yöneticisinin kendi ili bölgesel / yerel kapsamda kilitli gelir. */
   for (const box of form.querySelectorAll('[name="cities"]')) { box.checked = chosen.includes(box.value) || box.value === own; box.disabled = box.value === own; }
   renderSubtypes(listOf(value.subtypes));
   for (const box of form.querySelectorAll('[name="work_groups"]')) box.checked = listOf(value.work_groups).includes(box.value);

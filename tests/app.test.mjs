@@ -178,8 +178,10 @@ test('il yöneticisi yalnızca kendi ilini içeren etkinlikleri planlar', () => 
   const ilYoneticisi = { city: 'İzmir' };
   assert.equal(validateEvent({ ...sample, cities: ['İzmir'] }, ilYoneticisi).city, 'İzmir');
   assert.throws(() => validateEvent(sample, ilYoneticisi), ValidationError);
-  assert.throws(() => validateEvent({ ...sample, scope: NATIONWIDE }, ilYoneticisi), ValidationError);
-  assert.throws(() => validateEvent({ ...sample, scope: INTERNATIONAL }, ilYoneticisi), ValidationError);
+  /* İle bağlı olmayan kapsamları il yöneticisi de açar; düzenlemesi sunucuda
+     kendi açtığı kayıtlarla sınırlanır (bkz. server.mjs, canManage). */
+  assert.equal(validateEvent({ ...sample, scope: NATIONWIDE }, ilYoneticisi).cities, '');
+  assert.equal(validateEvent({ ...sample, scope: INTERNATIONAL }, ilYoneticisi).city, INTERNATIONAL);
   assert.equal(validateEvent(ortak, ilYoneticisi).scope, 'Bölgesel / Yerel');
   assert.throws(() => validateEvent({ ...ortak, cities: ['Manisa', 'Aydın'] }, ilYoneticisi), ValidationError);
 });
@@ -338,7 +340,15 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
     assert.equal((await request('/api/events', 'POST', { ...sample, cities: ['İzmir'] }, ilCookie)).status, 201);
     assert.equal((await request('/api/events', 'POST', { ...ortak, cities: ['Manisa', 'Aydın'] }, ilCookie)).status, 400, 'kendi ilini içermeyen ortak etkinlik reddedilir');
     assert.equal((await request('/api/events', 'POST', ortak, ilCookie)).status, 201, 'kendi ilini içeren ortak etkinlik açılır');
-    assert.equal((await (await request('/api/events?tum=1', 'GET', null, cookie)).json()).length, 3, 'sayaçlar için tüm kayıtlar');
+    /* İle bağlı olmayan kapsam: il yöneticisi açar, kendi kaydını düzenler,
+       başkasının açtığına dokunamaz. */
+    const ulusal = await request('/api/events', 'POST', { ...sample, scope: 'Ulusal', work_groups: [] }, ilCookie);
+    assert.equal(ulusal.status, 201, 'il yöneticisi ulusal etkinlik açabilir');
+    const ulusalBody = await ulusal.json();
+    assert.equal((await request('/api/events/' + ulusalBody.id, 'PUT', { ...sample, scope: 'Ulusal', work_groups: [], updated: ulusalBody.updated }, ilCookie)).status, 200, 'kendi ulusal kaydını düzenler');
+    const merkezUlusal = await (await request('/api/events', 'POST', { ...sample, scope: 'Ulusal', work_groups: [] }, cookie)).json();
+    assert.equal((await request('/api/events/' + merkezUlusal.id, 'PUT', { ...sample, scope: 'Ulusal', work_groups: [], updated: merkezUlusal.updated }, ilCookie)).status, 403, 'başkasının ulusal kaydına dokunamaz');
+    assert.equal((await (await request('/api/events?tum=1', 'GET', null, cookie)).json()).length, 5, 'sayaçlar için tüm kayıtlar');
 
     /* Abonelik akışı: ortak il etkinliği her ilinin akışında görünür */
     const feed = await request('/takvim.ics?il=' + encodeURIComponent('İzmir'));
@@ -370,7 +380,7 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
     assert.match(documentXml, /w:orient="landscape"/);
     assert.equal(documentXml.match(/<w:tr>/g).length > 2, true);
     assert.doesNotMatch(documentXml, />SAAT</, 'saat sütunu yok');
-    assert.match(documentXml, /Durum: 0 tamamlandı, 2 tamamlanmadı \(2 planlandı, 0 ertelendi, 0 iptal edildi\)/);
+    assert.match(documentXml, /Durum: 0 tamamlandı, 4 tamamlanmadı \(4 planlandı, 0 ertelendi, 0 iptal edildi\)/);
     for (const header of ['ETKİNLİK TÜRÜ', 'ALT TÜR', 'ÇALIŞMA GRUPLARI']) assert.ok(documentXml.includes('>' + header + '<'), header + ' sütunu');
 
     /* Dönem seçimi ve Excel */
@@ -422,9 +432,9 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
     assert.equal((await request('/api/events/' + id, 'DELETE', null, cookie)).status, 200);
     assert.equal((await request('/api/photos/' + photoIds[0], 'GET', null, cookie)).status, 404, 'silinen etkinliğin fotoğrafı gösterilmez');
     records = await (await request('/api/events?from=2026-09-01&to=2026-10-01', 'GET', null, cookie)).json();
-    assert.equal(records.length, 1, 'yalnızca il yöneticisinin kaydı kalır');
+    assert.equal(records.length, 3, 'silinen dışındaki kayıtlar kalır: il yöneticisinin kaydı ve iki ulusal kayıt');
     db = await openDb({ url: backend.url || '', dir });
-    assert.equal((await db.get('SELECT CAST(count(*) AS INTEGER) AS n FROM events')).n, 3);
+    assert.equal((await db.get('SELECT CAST(count(*) AS INTEGER) AS n FROM events')).n, 5);
     assert.equal((await db.get('SELECT CAST(count(*) AS INTEGER) AS n FROM events WHERE deleted_at IS NOT NULL')).n, 1);
     await db.close();
 
@@ -472,6 +482,8 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
     assert.equal((await request('/api/events', 'POST', sample, cookie)).status, 401);
   } finally {
     if (child && child.exitCode === null) { child.kill(); await once(child, 'exit'); }
-    rmSync(dir, { recursive: true, force: true });
+    /* Windows'ta SQLite dosyasının tutamağı süreç öldükten sonra da bir süre
+       açık kalabiliyor; geçici klasör silinemezse testi düşürmeye değmez. */
+    try { rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }); } catch {}
   }
 });
