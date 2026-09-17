@@ -29,7 +29,12 @@ const basePath = (process.env.BASE_PATH || '').replace(/\/+$/, '');
    edilebildiği için ancak açıkça güvenilen bir kurulumda dikkate alınır. */
 const trustProxy = process.env.TRUST_PROXY === 'true';
 const SESSION_HOURS = 8;
-const FIELDS = 'id,title,scope,city,cities,category,subtypes,work_groups,theme,start,"end",all_day,online,location,purpose,description,status,students,teachers,others,partners,owner,updated';
+/* Kaydı girenin adı ve ili alt sorgularla gelir: JOIN, users.city ile
+   events.city'yi çakıştırıp süzme ve arama koşullarını bozardı. Ad soyad
+   girilmemiş hesap için boş döner; T.C. kimlik numarası bilerek gönderilmez. */
+const OWNER_FIELDS = `,(SELECT TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')) FROM users u WHERE u.id = events.owner) AS owner_name`
+  + `,(SELECT u.city FROM users u WHERE u.id = events.owner) AS owner_city`;
+const FIELDS = 'id,title,scope,city,cities,category,subtypes,work_groups,theme,start,"end",all_day,online,location,purpose,description,status,students,teachers,others,partners,owner,updated' + OWNER_FIELDS;
 
 const attempts = new Map();
 const digest = token => createHash('sha256').update(token).digest('hex');
