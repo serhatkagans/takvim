@@ -242,7 +242,8 @@ function monthGrid(first, list, titled) {
   return html + '</div>';
 }
 
-const resultItem = e => `<button class="agenda-item ${statusClass(e.status)}" data-event="${e.id}"><span class="agenda-date">${escapeHtml(e.start.slice(8, 10) + '.' + e.start.slice(5, 7))}<small>${escapeHtml(e.start.slice(0, 4))}</small></span><span class="agenda-body"><strong>${escapeHtml(e.title)}</strong><small>${escapeHtml([e.city, e.category, subtypeLabel(e), locationLabel(e)].join(' · '))}</small><small>${escapeHtml(e.status)}</small></span></button>`;
+/* `note`: başlığın yanında vurgulanan kısa bilgi (ör. katılımcı sayısı). */
+const resultItem = (e, note) => `<button class="agenda-item ${statusClass(e.status)}" data-event="${e.id}"><span class="agenda-date">${escapeHtml(e.start.slice(8, 10) + '.' + e.start.slice(5, 7))}<small>${escapeHtml(e.start.slice(0, 4))}</small></span><span class="agenda-body"><strong>${escapeHtml(e.title)}${typeof note === 'string' ? ` <em class="agenda-note">${escapeHtml(note)}</em>` : ''}</strong><small>${escapeHtml([e.city, e.category, subtypeLabel(e), locationLabel(e)].join(' · '))}</small><small>${escapeHtml(e.status)}</small></span></button>`;
 
 /** Üstteki sayaç kutularından biri açıksa, o sayının hangi il / çalışma grubu /
     etkinlik türünden oluştuğunu adetleriyle listeler. Bir değere tıklamak
@@ -308,10 +309,11 @@ function renderBreakdown() {
   }
   if (byEvent) {
     const rows = list.filter(e => weight(e) > 0).sort((a, b) => weight(b) - weight(a) || b.start.localeCompare(a.start));
+    const unit = openStat === 'teachers' ? 'öğretmen' : 'öğrenci';
     box.innerHTML = `<p>${label} · ayrıntı için tıklayın</p>`
-      + (rows.length
-        ? `<div class="stat-pills">${rows.map(e => `<button type="button" class="stat-pill" data-event="${e.id}" title="${escapeHtml([e.start.slice(0, 10), placeLabel(e)].join(' · '))}">${escapeHtml(e.title)} <b>${weight(e).toLocaleString('tr-TR')}</b></button>`).join('')}</div>`
-        : '<p>Gösterilecek etkinlik yok.</p>');
+      + `<div class="stat-events">${rows.length
+        ? rows.map(e => resultItem(e, `${weight(e).toLocaleString('tr-TR')} ${unit}`)).join('')
+        : '<div class="empty">Gösterilecek etkinlik yok.</div>'}</div>`;
     return;
   }
   const counts = new Map(all ? all().map(value => [value, 0]) : []);

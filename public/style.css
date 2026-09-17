@@ -105,6 +105,7 @@ p { margin-top: 0 }
 .stat-events .agenda-item { grid-template-columns: 62px 1fr; gap: 12px; padding: 10px 2px }
 .stat-events .agenda-item:last-child { border-bottom: 0 }
 .stat-events .empty { padding: 20px 2px }
+.agenda-note { font-style: normal; font-weight: 800; color: var(--color-brand); white-space: nowrap }
 /* Giriş sayfası (giris.html): takvim yalnızca oturum açan kullanıcıya açıktır. */
 .login-main { display: flex; justify-content: center; padding: 48px 16px 72px }
 .login-card { width: 100%; max-width: 420px; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 14px; padding: 28px; box-shadow: var(--shadow-sm); display: grid; gap: 12px }
