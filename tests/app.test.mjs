@@ -33,7 +33,7 @@ function unzip(buffer) {
 }
 
 const merkez = { city: null };
-const sample = { title: 'Yapay zekâ tanışma toplantısı', scope: 'Bölgesel / Yerel', cities: ['Ankara'], category: 'Diğer', subtypes: [], work_groups: ['Yapay Zekâ'], start: '2026-09-16T09:00', end: '2026-09-17T11:00', online: false, location: 'Bilim merkezi', description: 'Deneme kaydı', status: 'Planlandı', students: 40, teachers: '3', others: '', purpose: 'Akranlarla tanışmak', partners: [{ person: 'Ayşe Yılmaz', org: 'Bilim Merkezi' }, { person: ' ', org: '' }] };
+const sample = { title: 'Yapay zekâ tanışma toplantısı', scope: 'Bölgesel / Yerel', cities: ['Ankara'], subtypes: ['Diğer'], work_groups: ['Yapay Zekâ'], start: '2026-09-16T09:00', end: '2026-09-17T11:00', online: false, location: 'Bilim merkezi', description: 'Deneme kaydı', status: 'Planlandı', students: 40, teachers: '3', others: '', purpose: 'Akranlarla tanışmak', partners: [{ person: 'Ayşe Yılmaz', org: 'Bilim Merkezi' }, { person: ' ', org: '' }] };
 const ortak = { ...sample, title: 'Ortak robotik atölyesi', scope: 'Bölgesel / Yerel', cities: ['Manisa', 'İzmir'], start: '2026-10-05T10:00', end: '2026-10-05T12:00', online: true, location: '' };
 
 test('il, tema ve tür listeleri', () => {
@@ -42,17 +42,16 @@ test('il, tema ve tür listeleri', () => {
   assert.equal(places.length, 84);
   assert.ok(!cities.includes('YEĞİTEK'), 'YEĞİTEK bir il değil');
   assert.ok(groups.includes('Espor') && !groups.includes('Genel'));
-  assert.equal(categories.length, 3);
+  assert.equal(categories.length, 1, 'tür artık sorulmuyor, tek değer yazılır');
   for (const kind of categories) assert.ok(Array.isArray(subtypes[kind]), kind + ' alt seçenekleri');
-  assert.ok(subtypes['Temel GençTek etkinliği'].includes('Genç Gölge'));
-  assert.deepEqual(subtypes['Diğer'], [], '"Diğer" türünde alt tür sorulmaz');
+  for (const name of ['Genç Gölge', 'Görünürlük / Tanıtım', 'Diğer']) assert.ok(subtypes['Temel GençTek etkinliği'].includes(name), name + ' seçilebilir');
   assert.ok(!categories.includes(GROUP_KIND), 'çalışma grubu artık tür değil');
 });
 
 test('alt tür süzgeci', () => {
   assert.ok(validFilters({ category: 'Temel GençTek etkinliği', subtype: 'Genç Gölge' }));
-  assert.ok(!validFilters({ subtype: 'Genç Gölge' }), 'tür seçilmeden alt tür olmaz');
-  assert.ok(!validFilters({ category: 'Temel GençTek etkinliği', subtype: 'Robotik' }), 'başka türün alt türü');
+  assert.ok(validFilters({ subtype: 'Genç Gölge' }), 'tür süzgeci tek başına çalışır');
+  assert.ok(!validFilters({ subtype: 'Robotik' }), 'çalışma grubu adı tür olamaz');
   assert.ok(!validFilters({ category: GROUP_KIND }), 'eski tür süzülmez');
   assert.ok(validFilters({ theme: 'Robotik' }));
   assert.deepEqual(filterSql({ theme: 'Robotik' }), { clauses: ['work_groups LIKE ?'], params: ['%|Robotik|%'] });
@@ -82,14 +81,14 @@ test('etkinlik doğrulama', () => {
   const event = validateEvent(sample, merkez);
   assert.equal(event.city, 'Ankara');
   assert.equal(event.cities, '|Ankara|');
-  assert.equal(event.subtypes, '||');
+  assert.equal(event.subtypes, '|Diğer|');
   assert.equal(event.work_groups, '|Yapay Zekâ|');
   assert.equal(event.theme, 'Yapay Zekâ');
-  const both = validateEvent({ ...sample, category: 'Temel GençTek etkinliği', subtypes: ['Genç Gölge'], work_groups: ['Robotik', 'Espor'] }, merkez);
+  const both = validateEvent({ ...sample, subtypes: ['Genç Gölge'], work_groups: ['Robotik', 'Espor'] }, merkez);
   assert.deepEqual([both.subtypes, both.work_groups, both.theme], ['|Genç Gölge|', '|Robotik|Espor|', 'Robotik, Espor'], 'tür ve çalışma grubu birlikte');
   assert.equal(validateEvent({ ...sample, work_groups: [] }, merkez).theme, 'Genel', 'çalışma grubu isteğe bağlı');
   assert.throws(() => validateEvent({ ...sample, work_groups: ['Engelsiz Bilişim'] }, merkez), ValidationError, 'pasif grup seçilemez');
-  assert.throws(() => validateEvent({ ...sample, category: GROUP_KIND }, merkez), ValidationError, 'eski tür kabul edilmez');
+  assert.equal(validateEvent({ ...sample, category: GROUP_KIND }, merkez).category, 'Temel GençTek etkinliği', 'gövdeden gelen tür yok sayılır');
   assert.deepEqual([event.students, event.teachers, event.others], [40, 3, 0]);
   assert.equal(event.purpose, 'Akranlarla tanışmak');
   assert.deepEqual(JSON.parse(event.partners), [{ person: 'Ayşe Yılmaz', org: 'Bilim Merkezi' }], 'boş paydaş satırı atılır');
@@ -97,12 +96,12 @@ test('etkinlik doğrulama', () => {
   assert.throws(() => validateEvent({ ...sample, purpose: 'a'.repeat(2001) }, merkez), ValidationError);
   assert.throws(() => validateEvent({ ...sample, start: '2026-02-30T09:00' }, merkez), ValidationError);
   assert.throws(() => validateEvent({ ...sample, end: sample.start }, merkez), ValidationError);
-  assert.throws(() => validateEvent({ ...sample, category: 'Temel GençTek etkinliği', subtypes: [] }, merkez), ValidationError, 'alt seçenek zorunlu');
+  assert.throws(() => validateEvent({ ...sample, subtypes: [] }, merkez), ValidationError, 'en az bir tür zorunlu');
   assert.throws(() => validateEvent({ ...sample, subtypes: ['Robotik'] }, merkez), ValidationError, 'grup, alt tür olamaz');
   assert.throws(() => validateEvent({ ...sample, work_groups: ['Olmayan grup'] }, merkez), ValidationError);
-  assert.equal(validateEvent({ ...sample, category: 'Temel GençTek etkinliği', subtypes: ['Sahne Senin', 'Genç Gölge'] }, merkez).subtypes, '|Genç Gölge|Sahne Senin|', 'liste sırasıyla saklanır');
-  assert.equal(validateEvent({ ...sample, category: 'Görünürlük / Tanıtım', subtypes: [] }, merkez).subtypes, '||', 'listesi boş türde alt seçenek istenmez');
-  assert.throws(() => validateEvent({ ...sample, category: 'Görünürlük / Tanıtım', subtypes: ['Atölye'] }, merkez), ValidationError, 'eski tür adı kabul edilmez');
+  assert.equal(validateEvent({ ...sample, subtypes: ['Sahne Senin', 'Genç Gölge'] }, merkez).subtypes, '|Genç Gölge|Sahne Senin|', 'liste sırasıyla saklanır');
+  assert.equal(validateEvent({ ...sample, subtypes: ['Görünürlük / Tanıtım'] }, merkez).subtypes, '|Görünürlük / Tanıtım|');
+  assert.throws(() => validateEvent({ ...sample, subtypes: ['Atölye'] }, merkez), ValidationError, 'eski tür adı kabul edilmez');
   assert.throws(() => validateEvent({ ...sample, status: 'Belirsiz' }, merkez), ValidationError);
   assert.equal(validateEvent({ ...sample, status: 'Tamamlandı' }, merkez).status, 'Tamamlandı');
   assert.throws(() => validateEvent({ ...sample, students: -1 }, merkez), ValidationError);
@@ -137,7 +136,7 @@ test('eski grup / tür adları açılışta yeni listelere uydurulur', async () 
     for (let round = 0; round < 2; round++) { db = await openDb({ url: '', dir }); if (round === 0) await db.close(); }
     const rows = Object.fromEntries((await db.all('SELECT title,category,subtypes,work_groups,theme FROM events')).map(r => [r.title, [r.category, r.subtypes, r.work_groups, r.theme]]));
     await db.close();
-    assert.deepEqual(rows['yeniden adlanan grup'], ['Diğer', '||', '|Espor|Yapay Zekâ|', 'Espor, Yapay Zekâ'], 'çalışma grubu etkinliği Diğer türüne geçer');
+    assert.deepEqual(rows['yeniden adlanan grup'], ['Temel GençTek etkinliği', '||', '|Espor|Yapay Zekâ|', 'Espor, Yapay Zekâ'], 'çalışma grubu etkinliği tek türe geçer');
     assert.deepEqual(rows['türü değişen'], ['Temel GençTek etkinliği', '|Tek Maraton / Eğitim Teknolojileri Fikir Maratonu|', '||', 'Genel']);
     assert.deepEqual(rows['türü eski, alt türü grup'], ['Temel GençTek etkinliği', '|Genç Gölge|', '|Robotik|', 'Robotik']);
     assert.deepEqual(rows['karşılıksız'], ['Temel GençTek etkinliği', '||', '||', 'Genel']);
@@ -187,7 +186,7 @@ test('il yöneticisi yalnızca kendi ilini içeren etkinlikleri planlar', () => 
 });
 
 test('ICS çıktısı', () => {
-  const text = buildIcs([{ ...sample, subtypes: '||', work_groups: '|Yapay Zekâ|', id: 7, updated: '2026-09-01T10:00:00.000Z', all_day: 0 }], { host: 'takvim.test' });
+  const text = buildIcs([{ ...sample, subtypes: '|Diğer|', work_groups: '|Yapay Zekâ|', id: 7, updated: '2026-09-01T10:00:00.000Z', all_day: 0 }], { host: 'takvim.test' });
   assert.match(text, /BEGIN:VEVENT/);
   assert.match(text, /UID:etkinlik-7@takvim\.test/);
   assert.match(text, /DTSTART:20260916T060000Z/); // 09:00 TR = 06:00 UTC

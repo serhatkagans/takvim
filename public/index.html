@@ -61,9 +61,7 @@
       <select id="city"></select>
       <label for="theme">Çalışma grubu</label>
       <select id="theme"></select>
-      <label for="category">Etkinlik türü</label>
-      <select id="category"></select>
-      <label for="subtype" id="subtype-label">Etkinlik alt türü</label>
+      <label for="subtype" id="subtype-label">Etkinlik türü</label>
       <select id="subtype"></select>
       <label for="event-status">Etkinlik durumu</label>
       <select id="event-status"></select>
@@ -234,11 +232,7 @@
     <div class="dialog-top"><h2 id="form-title">Etkinlik ekle</h2><button type="button" class="close" data-close aria-label="Kapat">×</button></div>
     <input name="id" type="hidden"><input name="updated" type="hidden">
     <label>Etkinlik adı<input name="title" required maxlength="160" placeholder="GençTek Konya Yapay Zekâ tanışma toplantısı"></label>
-    <fieldset class="choice">
-      <legend>Etkinlik türü</legend>
-      <div class="choice-cards" id="kind-cards"></div>
-    </fieldset>
-    <fieldset class="choice" id="subtypes-field" hidden>
+    <fieldset class="choice" id="subtypes-field">
       <legend>İlişkili olduğu etkinlik türleri <small>birden fazla seçilebilir</small></legend>
       <div class="check-grid" id="subtype-checks"></div>
     </fieldset>
@@ -305,7 +299,7 @@
     <div><dt>Tarih</dt><dd id="detail-time"></dd></div>
     <div><dt>Kapsam</dt><dd id="detail-scope"></dd></div>
     <div><dt>Yer</dt><dd id="detail-place"></dd></div>
-    <div id="detail-sub-row"><dt>İlişkili etkinlik türleri</dt><dd id="detail-subtypes"></dd></div>
+    <div id="detail-sub-row"><dt>Etkinlik türleri</dt><dd id="detail-subtypes"></dd></div>
     <div id="detail-groups-row"><dt>Çalışma grubu</dt><dd id="detail-groups"></dd></div>
     <div id="detail-counts-row"><dt>Katılımcılar</dt><dd id="detail-counts"></dd></div>
   </dl>
