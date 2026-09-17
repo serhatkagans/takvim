@@ -535,7 +535,7 @@ function editEvent(event) {
   /* Yeni kayıt kenar çubuğundaki süzgeçlerle önceden doldurulur. */
   const value = event || {
     category: $('#category').value, subtypes: $('#subtype').value ? `|${$('#subtype').value}|` : '', work_groups: theme ? `|${theme}|` : '',
-    scope: own || meta.cities.includes(place) ? meta.scopes[2] : place, cities: `|${own || place}|`,
+    scope: own || [meta.center, ...meta.cities].includes(place) ? meta.scopes[2] : place, cities: `|${own || place}|`,
     status: 'Planlandı', online: 0,
   };
   form.elements.id.value = event?.id || '';
@@ -890,7 +890,7 @@ async function init() {
   try {
     await identity();
     const sorted = [...meta.cities].sort((a, b) => a.localeCompare(b, 'tr'));
-    $('#city').innerHTML = options([meta.international, meta.nationwide, ...sorted], 'Tüm kapsamlar');
+    $('#city').innerHTML = options([meta.international, meta.nationwide, meta.center, ...sorted], 'Tüm kapsamlar');
     /* Pasif gruplar formdaki gibi listede görünür ama seçilemez. */
     $('#theme').innerHTML = options(meta.groups, 'Tüm çalışma grupları') + meta.passiveGroups.map(value => `<option disabled>${escapeHtml(value)} (pasif)</option>`).join('');
     $('#category').innerHTML = options(meta.categories, 'Tüm türler');
@@ -904,7 +904,8 @@ async function init() {
     /* Pasif çalışma grupları ileride açılacak: görünür ama seçilemez. */
     $('#group-checks').innerHTML = meta.groups.map(value => checkbox('work_groups', value)).join('') + meta.passiveGroups.map(value => checkbox('work_groups', value, true)).join('');
     $('#scope-cards').innerHTML = radioCards('scope', meta.scopes);
-    $('#city-checks').innerHTML = sorted.map(city => checkbox('cities', city)).join('');
+    /* YEĞİTEK listenin başında: merkezin kendi etkinliği bir ile yazılmaz. */
+    $('#city-checks').innerHTML = [meta.center, ...sorted].map(city => checkbox('cities', city)).join('');
     $('#status-cards').innerHTML = radioCards('status', meta.statuses);
     $('#user-form [name=city]').innerHTML = options(sorted, 'Merkez (tüm iller)');
     await Promise.all([reload(), loadTotals()]);

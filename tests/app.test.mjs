@@ -38,8 +38,9 @@ const ortak = { ...sample, title: 'Ortak robotik atölyesi', scope: 'Bölgesel /
 
 test('il, tema ve tür listeleri', () => {
   assert.equal(new Set(cities).size, 81);
-  assert.deepEqual(places.slice(0, 2), [INTERNATIONAL, NATIONWIDE]);
-  assert.equal(places.length, 83);
+  assert.deepEqual(places.slice(0, 3), [INTERNATIONAL, NATIONWIDE, 'YEĞİTEK']);
+  assert.equal(places.length, 84);
+  assert.ok(!cities.includes('YEĞİTEK'), 'YEĞİTEK bir il değil');
   assert.ok(groups.includes('Espor') && !groups.includes('Genel'));
   assert.equal(categories.length, 3);
   for (const kind of categories) assert.ok(Array.isArray(subtypes[kind]), kind + ' alt seçenekleri');
@@ -114,6 +115,8 @@ test('etkinlik doğrulama', () => {
   assert.equal(joint.cities, '|İzmir|Manisa|');
   assert.throws(() => validateEvent({ ...ortak, cities: [] }, merkez), ValidationError, 'bölgesel / yerel etkinlikte en az bir il');
   assert.throws(() => validateEvent({ ...sample, scope: 'İl' }, merkez), ValidationError, 'eski kapsam kabul edilmez');
+  const center = validateEvent({ ...sample, cities: ['Ankara', 'YEĞİTEK'] }, merkez);
+  assert.deepEqual([center.city, center.cities], ['YEĞİTEK, Ankara', '|YEĞİTEK|Ankara|'], 'YEĞİTEK il gibi seçilir, başta durur');
   const national = validateEvent({ ...sample, scope: NATIONWIDE }, merkez);
   assert.deepEqual([national.city, national.cities], [NATIONWIDE, '']);
   assert.throws(() => validateEvent({ ...sample, scope: 'Türkiye geneli' }, merkez), ValidationError);

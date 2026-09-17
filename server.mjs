@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { randomBytes, createHash } from 'node:crypto';
-import { cities, places, scopes, categories, subtypes, groups, passiveGroups, statuses, NATIONWIDE, INTERNATIONAL, listOf, validFilters, filterSql, photoType, MAX_PHOTOS, MAX_PHOTO_BYTES, verifyPassword, hashPassword, checkPassword, validateEvent, validDay, daysBetween, dayString, ValidationError, MAX_RANGE_DAYS, SEARCH_LIMIT, FEED_LIMIT, MIN_PASSWORD } from './lib/data.mjs';
+import { cities, places, scopes, categories, subtypes, groups, passiveGroups, statuses, NATIONWIDE, INTERNATIONAL, CENTER, listOf, validFilters, filterSql, photoType, MAX_PHOTOS, MAX_PHOTO_BYTES, verifyPassword, hashPassword, checkPassword, validateEvent, validDay, daysBetween, dayString, ValidationError, MAX_RANGE_DAYS, SEARCH_LIMIT, FEED_LIMIT, MIN_PASSWORD } from './lib/data.mjs';
 import { openDb } from './lib/db.mjs';
 import { listUsers, createUser, resetPassword, setCity, setName, removeUser, displayName } from './lib/users.mjs';
 import { buildIcs } from './lib/ics.mjs';
@@ -195,7 +195,7 @@ const server = createServer(async (req, res) => {
     if (url.pathname.startsWith('/api/')) res.setHeader('Cache-Control', 'no-store');
 
     if (url.pathname === '/api/meta' && req.method === 'GET')
-      return send(res, 200, { cities, places, scopes, categories, subtypes, groups, passiveGroups, statuses, nationwide: NATIONWIDE, international: INTERNATIONAL, maxRangeDays: MAX_RANGE_DAYS, minPassword: MIN_PASSWORD, user: user ? { id: user.id, username: user.username, name: displayName(user), city: user.city, central: !user.city } : null });
+      return send(res, 200, { cities, places, scopes, categories, subtypes, groups, passiveGroups, statuses, nationwide: NATIONWIDE, international: INTERNATIONAL, center: CENTER, maxRangeDays: MAX_RANGE_DAYS, minPassword: MIN_PASSWORD, user: user ? { id: user.id, username: user.username, name: displayName(user), city: user.city, central: !user.city } : null });
 
     /* ---- Faaliyet raporu (Word / Excel) — yalnızca yöneticiler ----------
        Dönem `bas`–`bit` (iki gün dahil) ya da tek ay (`ay=2026-09`).
