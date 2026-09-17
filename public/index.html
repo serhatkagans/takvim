@@ -239,28 +239,29 @@
       <div class="choice-cards" id="kind-cards"></div>
     </fieldset>
     <fieldset class="choice" id="subtypes-field" hidden>
-      <legend>Alt türler <small>birden fazla seçilebilir</small></legend>
+      <legend>İlişkili olduğu etkinlik türleri <small>birden fazla seçilebilir</small></legend>
       <div class="check-grid" id="subtype-checks"></div>
     </fieldset>
     <fieldset class="choice">
       <legend>Kapsam</legend>
       <div class="choice-cards" id="scope-cards"></div>
     </fieldset>
-    <label id="city-field" hidden>İl<select name="city"></select></label>
     <fieldset class="choice" id="cities-field" hidden>
-      <legend>Ortak iller <small id="cities-count"></small></legend>
-      <input id="cities-search" type="search" placeholder="İl ara…" aria-label="Ortak illerde ara">
+      <legend>İller <small id="cities-count"></small></legend>
+      <input id="cities-search" type="search" placeholder="İl ara…" aria-label="İllerde ara">
       <div class="check-grid check-scroll" id="city-checks"></div>
     </fieldset>
-    <label class="check"><input type="checkbox" name="group_event"> İlgili olduğu çalışma grubu etkinliği</label>
-    <fieldset class="choice" id="groups-field" hidden>
-      <legend>Çalışma grupları <small>birden fazla seçilebilir</small></legend>
+    <fieldset class="choice" id="groups-field">
+      <legend>İlgili olduğu çalışma grubu varsa işaretleyin <small>birden fazla seçilebilir</small></legend>
       <div class="check-grid" id="group-checks"></div>
     </fieldset>
-    <label>Durum<select name="status" required></select></label>
+    <fieldset class="choice">
+      <legend>Durum</legend>
+      <div class="choice-cards" id="status-cards"></div>
+    </fieldset>
     <div class="form-row">
-      <label>Başlangıç günü<input name="start" type="date" min="2000-01-01" max="2099-12-31" required></label>
-      <label>Bitiş günü <small>bu gün dahildir</small><input name="end" type="date" min="2000-01-01" max="2099-12-31" required></label>
+      <label>Başlangıç tarihi<input name="start" type="date" min="2000-01-01" max="2099-12-31" required></label>
+      <label>Bitiş tarihi<input name="end" type="date" min="2000-01-01" max="2099-12-31" required></label>
     </div>
     <fieldset class="choice">
       <legend>Katılım biçimi</legend>
@@ -271,11 +272,11 @@
     </fieldset>
     <label id="location-field">Yer<input name="location" maxlength="250" placeholder="Bilim Merkezi konferans salonu"></label>
     <fieldset class="choice">
-      <legend>Kaç kişi katıldı? <small id="people-total"></small></legend>
+      <legend>Hedef kitle – katılımcılar <small id="people-total"></small></legend>
       <div class="form-row form-row-3">
         <label>Öğrenci<input name="students" type="number" min="0" max="1000000" step="1" inputmode="numeric" placeholder="0"></label>
         <label>Öğretmen<input name="teachers" type="number" min="0" max="1000000" step="1" inputmode="numeric" placeholder="0"></label>
-        <label>Diğer<input name="others" type="number" min="0" max="1000000" step="1" inputmode="numeric" placeholder="0"></label>
+        <label>Diğer <small>(mentör, paydaş, yönetici vb.)</small><input name="others" type="number" min="0" max="1000000" step="1" inputmode="numeric" placeholder="0"></label>
       </div>
     </fieldset>
     <fieldset class="choice">
@@ -304,7 +305,7 @@
     <div><dt>Tarih</dt><dd id="detail-time"></dd></div>
     <div><dt>Kapsam</dt><dd id="detail-scope"></dd></div>
     <div><dt>Yer</dt><dd id="detail-place"></dd></div>
-    <div id="detail-sub-row"><dt>Alt türler</dt><dd id="detail-subtypes"></dd></div>
+    <div id="detail-sub-row"><dt>İlişkili etkinlik türleri</dt><dd id="detail-subtypes"></dd></div>
     <div id="detail-groups-row"><dt>Çalışma grubu</dt><dd id="detail-groups"></dd></div>
     <div id="detail-counts-row"><dt>Katılımcılar</dt><dd id="detail-counts"></dd></div>
   </dl>

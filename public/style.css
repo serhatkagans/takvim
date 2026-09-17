@@ -100,6 +100,7 @@ p { margin-top: 0 }
 .partner-item { padding-bottom: 10px; border-bottom: 1px solid var(--color-border) }
 .partner-item:last-child { border-bottom: 0; padding-bottom: 0 }
 .partner-item > .stat-pills { margin-top: 6px }
+.partner-item > .stat-events { margin-top: 4px; border-top: 0 }
 .stat-events { margin-top: 12px; border-top: 1px solid var(--color-border) }
 .stat-events > p { margin: 10px 0 0 }
 .stat-events .agenda-item { grid-template-columns: 62px 1fr; gap: 12px; padding: 10px 2px }
@@ -155,6 +156,7 @@ aside input:focus, aside select:focus { border-color: var(--color-brand); box-sh
 .pickers select { min-height: 38px; border: 1px solid var(--color-border-strong); border-radius: 6px; padding: 6px 10px; background: var(--color-surface); font-family: var(--font-display); font-weight: 600; font-size: .88rem; max-width: 100% }
 .day-more { border: 0; background: none; padding: 2px 4px; text-align: left; color: var(--color-brand); font-size: .72rem; font-weight: 700; cursor: pointer }
 .day-more:hover { text-decoration: underline }
+.stat-more { display: block; margin-top: 8px; padding: 4px 0; font-size: .8rem }
 .search-results { border-top: 1px solid var(--color-border) }
 .search-results h3 { margin: 0; padding: 18px 24px 6px; font-size: 1rem; color: var(--color-text-strong) }
 .view-toggle button[aria-pressed="true"] { background: var(--color-text-strong); border-color: var(--color-text-strong); color: #fff }
@@ -218,6 +220,8 @@ dialog textarea { resize: vertical }
 dialog .check { font-family: var(--font-display); font-weight: 650; color: var(--color-text-strong) }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px }
 .form-row-3 { grid-template-columns: repeat(3, 1fr) }
+/* Açıklamalı etiket sütunu uzatınca yandaki kutular esnemesin, alta hizalansın. */
+.form-row > label { align-content: end }
 .choice { border: 0; margin: 0; padding: 0; min-width: 0; display: grid; gap: 8px }
 .choice legend { font-family: var(--font-display); font-size: .88rem; font-weight: 650; color: var(--color-text-strong); padding: 0; margin-bottom: 8px }
 .choice legend small { font-weight: 400; color: var(--color-text-muted) }

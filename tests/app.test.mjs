@@ -33,8 +33,8 @@ function unzip(buffer) {
 }
 
 const merkez = { city: null };
-const sample = { title: 'Yapay zekâ tanışma toplantısı', scope: 'İl', city: 'Ankara', category: 'Diğer', subtypes: [], work_groups: ['Yapay Zekâ'], start: '2026-09-16T09:00', end: '2026-09-17T11:00', online: false, location: 'Bilim merkezi', description: 'Deneme kaydı', status: 'Planlandı', students: 40, teachers: '3', others: '', purpose: 'Akranlarla tanışmak', partners: [{ person: 'Ayşe Yılmaz', org: 'Bilim Merkezi' }, { person: ' ', org: '' }] };
-const ortak = { ...sample, title: 'Ortak robotik atölyesi', scope: 'Ortak iller', cities: ['Manisa', 'İzmir'], start: '2026-10-05T10:00', end: '2026-10-05T12:00', online: true, location: '' };
+const sample = { title: 'Yapay zekâ tanışma toplantısı', scope: 'Bölgesel / Yerel', cities: ['Ankara'], category: 'Diğer', subtypes: [], work_groups: ['Yapay Zekâ'], start: '2026-09-16T09:00', end: '2026-09-17T11:00', online: false, location: 'Bilim merkezi', description: 'Deneme kaydı', status: 'Planlandı', students: 40, teachers: '3', others: '', purpose: 'Akranlarla tanışmak', partners: [{ person: 'Ayşe Yılmaz', org: 'Bilim Merkezi' }, { person: ' ', org: '' }] };
+const ortak = { ...sample, title: 'Ortak robotik atölyesi', scope: 'Bölgesel / Yerel', cities: ['Manisa', 'İzmir'], start: '2026-10-05T10:00', end: '2026-10-05T12:00', online: true, location: '' };
 
 test('il, tema ve tür listeleri', () => {
   assert.equal(new Set(cities).size, 81);
@@ -100,8 +100,8 @@ test('etkinlik doğrulama', () => {
   assert.throws(() => validateEvent({ ...sample, subtypes: ['Robotik'] }, merkez), ValidationError, 'grup, alt tür olamaz');
   assert.throws(() => validateEvent({ ...sample, work_groups: ['Olmayan grup'] }, merkez), ValidationError);
   assert.equal(validateEvent({ ...sample, category: 'Temel GençTek etkinliği', subtypes: ['Sahne Senin', 'Genç Gölge'] }, merkez).subtypes, '|Genç Gölge|Sahne Senin|', 'liste sırasıyla saklanır');
-  assert.equal(validateEvent({ ...sample, category: 'İl etkinliği', subtypes: [] }, merkez).subtypes, '||', 'listesi boş türde alt seçenek istenmez');
-  assert.throws(() => validateEvent({ ...sample, category: 'İl etkinliği', subtypes: ['Atölye'] }, merkez), ValidationError, 'eski tür adı kabul edilmez');
+  assert.equal(validateEvent({ ...sample, category: 'Görünürlük / Tanıtım', subtypes: [] }, merkez).subtypes, '||', 'listesi boş türde alt seçenek istenmez');
+  assert.throws(() => validateEvent({ ...sample, category: 'Görünürlük / Tanıtım', subtypes: ['Atölye'] }, merkez), ValidationError, 'eski tür adı kabul edilmez');
   assert.throws(() => validateEvent({ ...sample, status: 'Belirsiz' }, merkez), ValidationError);
   assert.equal(validateEvent({ ...sample, status: 'Tamamlandı' }, merkez).status, 'Tamamlandı');
   assert.throws(() => validateEvent({ ...sample, students: -1 }, merkez), ValidationError);
@@ -112,7 +112,8 @@ test('etkinlik doğrulama', () => {
   const joint = validateEvent(ortak, merkez);
   assert.equal(joint.city, 'İzmir, Manisa');
   assert.equal(joint.cities, '|İzmir|Manisa|');
-  assert.throws(() => validateEvent({ ...ortak, cities: ['İzmir'] }, merkez), ValidationError, 'ortak etkinlikte en az iki il');
+  assert.throws(() => validateEvent({ ...ortak, cities: [] }, merkez), ValidationError, 'bölgesel / yerel etkinlikte en az bir il');
+  assert.throws(() => validateEvent({ ...sample, scope: 'İl' }, merkez), ValidationError, 'eski kapsam kabul edilmez');
   const national = validateEvent({ ...sample, scope: NATIONWIDE }, merkez);
   assert.deepEqual([national.city, national.cities], [NATIONWIDE, '']);
   assert.throws(() => validateEvent({ ...sample, scope: 'Türkiye geneli' }, merkez), ValidationError);
@@ -172,11 +173,11 @@ test('tüm gün etkinliği bitişi ertesi günün 00:00ı olarak saklanır', () 
 
 test('il yöneticisi yalnızca kendi ilini içeren etkinlikleri planlar', () => {
   const ilYoneticisi = { city: 'İzmir' };
-  assert.equal(validateEvent({ ...sample, city: 'İzmir' }, ilYoneticisi).city, 'İzmir');
+  assert.equal(validateEvent({ ...sample, cities: ['İzmir'] }, ilYoneticisi).city, 'İzmir');
   assert.throws(() => validateEvent(sample, ilYoneticisi), ValidationError);
   assert.throws(() => validateEvent({ ...sample, scope: NATIONWIDE }, ilYoneticisi), ValidationError);
   assert.throws(() => validateEvent({ ...sample, scope: INTERNATIONAL }, ilYoneticisi), ValidationError);
-  assert.equal(validateEvent(ortak, ilYoneticisi).scope, 'Ortak iller');
+  assert.equal(validateEvent(ortak, ilYoneticisi).scope, 'Bölgesel / Yerel');
   assert.throws(() => validateEvent({ ...ortak, cities: ['Manisa', 'Aydın'] }, ilYoneticisi), ValidationError);
 });
 
@@ -286,7 +287,7 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
     let records = await (await request('/api/events?from=2026-09-01&to=2026-10-01', 'GET', null, cookie)).json();
     assert.equal(records.length, 1);
     assert.equal(records[0].theme, 'Yapay Zekâ');
-    assert.equal(records[0].scope, 'İl');
+    assert.equal(records[0].scope, 'Bölgesel / Yerel');
     assert.equal(records[0].cities, '|Ankara|');
     assert.equal(records[0].students, 40);
     assert.equal(JSON.parse(records[0].partners)[0].org, 'Bilim Merkezi');
@@ -321,17 +322,17 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
     assert.equal((await request('/api/events?q=a', 'GET', null, cookie)).status, 400);
 
     /* Sürüm çakışması */
-    assert.equal((await request('/api/events/' + id, 'PUT', { ...sample, city: 'İzmir', updated: '2020-01-01T00:00:00.000Z' }, cookie)).status, 409);
-    const edited = await request('/api/events/' + id, 'PUT', { ...sample, city: 'İzmir', updated }, cookie);
+    assert.equal((await request('/api/events/' + id, 'PUT', { ...sample, cities: ['İzmir'], updated: '2020-01-01T00:00:00.000Z' }, cookie)).status, 409);
+    const edited = await request('/api/events/' + id, 'PUT', { ...sample, cities: ['İzmir'], updated }, cookie);
     assert.equal(edited.status, 200);
     const editedBody = await edited.json();
     assert.ok(editedBody.updated > updated, 'sürüm damgası ilerler');
-    assert.equal((await request('/api/events/' + id, 'PUT', { ...sample, city: 'İzmir', updated }, cookie)).status, 409, 'eski sürümle ikinci kayıt reddedilir');
+    assert.equal((await request('/api/events/' + id, 'PUT', { ...sample, cities: ['İzmir'], updated }, cookie)).status, 409, 'eski sürümle ikinci kayıt reddedilir');
 
     /* İl yöneticisi yetkisi */
     const ilCookie = await login('izmir', 'izmir-password-123');
-    assert.equal((await request('/api/events', 'POST', { ...sample, city: 'Ankara' }, ilCookie)).status, 400);
-    assert.equal((await request('/api/events', 'POST', { ...sample, city: 'İzmir' }, ilCookie)).status, 201);
+    assert.equal((await request('/api/events', 'POST', { ...sample, cities: ['Ankara'] }, ilCookie)).status, 400);
+    assert.equal((await request('/api/events', 'POST', { ...sample, cities: ['İzmir'] }, ilCookie)).status, 201);
     assert.equal((await request('/api/events', 'POST', { ...ortak, cities: ['Manisa', 'Aydın'] }, ilCookie)).status, 400, 'kendi ilini içermeyen ortak etkinlik reddedilir');
     assert.equal((await request('/api/events', 'POST', ortak, ilCookie)).status, 201, 'kendi ilini içeren ortak etkinlik açılır');
     assert.equal((await (await request('/api/events?tum=1', 'GET', null, cookie)).json()).length, 3, 'sayaçlar için tüm kayıtlar');
@@ -447,7 +448,7 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
     assert.equal((await request('/api/users/' + yeniId, 'PUT', { firstName: 'Ayşe', lastName: 'Demir' }, cookie)).status, 200);
     assert.equal((await (await request('/api/meta', 'GET', null, bursaCookie)).json()).user.name, 'Ayşe Demir', 'ad değişince oturum açık kalır');
     assert.equal((await (await request('/api/meta', 'GET', null, cookie)).json()).user.name, 'admin', 'adı olmayan eski hesap kullanıcı adıyla görünür');
-    assert.equal((await request('/api/events', 'POST', { ...sample, city: 'Bursa' }, bursaCookie)).status, 201);
+    assert.equal((await request('/api/events', 'POST', { ...sample, cities: ['Bursa'] }, bursaCookie)).status, 201);
 
     /* Parola atama açık oturumu kapatır */
     assert.equal((await request('/api/users/' + yeniId, 'PUT', { password: 'baska-parola-123' }, cookie)).status, 200);

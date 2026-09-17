@@ -30,6 +30,8 @@ const partnerLabel = p => [p.person, p.org].filter(Boolean).join(' – ');
 const MAX_PHOTOS = 5, MAX_PARTNERS = 20, MAX_DAY_EVENTS = 3;
 /* Sayaç dökümünde bir değer seçilince altında listelenen en fazla etkinlik. */
 const MAX_STAT_EVENTS = 10;
+/* Dökümde "devamını göster" ile açılmış listeler; kart değişince sıfırlanır. */
+const expandedLists = new Set();
 /* Kenar çubuğundaki süzgeç kutuları; "Filtreleri temizle" hepsini boşaltır. */
 /* Durum kutusunun kimliği '#event-status': '#status' sayfadaki durum mesajı satırıdır. */
 const FILTERS = ['#search', '#city', '#theme', '#category', '#subtype', '#event-status'];
@@ -90,7 +92,7 @@ async function reload() {
 }
 
 /** Kayıtların kenar çubuğu süzgeçlerine ve arama metnine göre süzülmesi.
-    Ortak il etkinliği her ilinde, çok gruplu etkinlik her grubunda görünür.
+    Birden çok ile bağlı etkinlik her ilinde, çok gruplu etkinlik her grubunda görünür.
     `skip` verilen süzgeç kutusu (ör. '#category') yok sayılır: sayaç dökümü
     kendi süzgecini uygulamadan hesaplanır, böylece bir değer seçilince
     diğerleri listeden kaybolmaz. Tür yok sayılırsa alt tür de yok sayılır. */
@@ -271,16 +273,31 @@ function statTotal(stat, list) {
   return list.filter(stat.subset).length;
 }
 
-/** Başlık (kurum / çalışma grubu) altında o başlığa ait etkinlik düğmeleri; en kalabalık başlık başta. */
-function groupedEvents(label, rows, empty) {
+/** Listenin ilk MAX_STAT_EVENTS öğesi; fazlası alttaki düğmeyle açılır / kapanır. */
+function limited(key, items, draw) {
+  const open = expandedLists.has(key), shown = open ? items : items.slice(0, MAX_STAT_EVENTS);
+  return {
+    html: shown.map(item => draw(item)).join(''),
+    more: items.length > MAX_STAT_EVENTS
+      ? `<button type="button" class="day-more stat-more" data-more="${escapeHtml(key)}">${open ? 'Daha az göster' : `Devamını göster (+${items.length - MAX_STAT_EVENTS})`}</button>`
+      : '',
+  };
+}
+
+/** Başlık (kurum / çalışma grubu) altında o başlığa ait etkinlikler; en kalabalık başlık başta.
+    `boxes`: etkinlikler küçük düğme yerine arama sonucu gibi kutu kutu alt alta. */
+function groupedEvents(label, rows, empty, boxes = false) {
   rows.sort((a, b) => b[1].size - a[1].size || a[0].localeCompare(b[0], 'tr'));
   const pill = e => `<button type="button" class="stat-pill" data-event="${e.id}">${escapeHtml(e.title)} <b>${escapeHtml(e.start.slice(8, 10) + '.' + e.start.slice(5, 7) + '.' + e.start.slice(0, 4))}</b></button>`;
+  const item = ([name, joined, note]) => {
+    const inner = limited(`${openStat}:${name}`, [...joined].sort((a, b) => b.start.localeCompare(a.start)), boxes ? e => resultItem(e) : pill);
+    return `<div class="partner-item"><strong>${escapeHtml(name)}</strong>`
+      + (note ? ` <small>(${escapeHtml(note)})</small>` : '')
+      + ` <small>· ${joined.size} etkinlik</small><div class="${boxes ? 'stat-events' : 'stat-pills'}">${inner.html}</div>${inner.more}</div>`;
+  };
+  const outer = limited(openStat, rows, item);
   return `<p>${label} · etkinliğe tıklayarak ayrıntıyı açın</p>`
-    + (rows.length
-      ? `<div class="partner-list">${rows.map(([name, joined, note]) => `<div class="partner-item"><strong>${escapeHtml(name)}</strong>`
-          + (note ? ` <small>(${escapeHtml(note)})</small>` : '')
-          + ` <small>· ${joined.size} etkinlik</small><div class="stat-pills">${[...joined].sort((a, b) => b.start.localeCompare(a.start)).map(pill).join('')}</div></div>`).join('')}</div>`
-      : `<p>${empty}</p>`);
+    + (rows.length ? `<div class="partner-list">${outer.html}</div>${outer.more}` : `<p>${empty}</p>`);
 }
 
 function renderBreakdown() {
@@ -293,7 +310,7 @@ function renderBreakdown() {
   if (byGroup) {
     const groups = new Map();
     for (const e of list) for (const group of groupsOf(e)) groups.set(group, (groups.get(group) || new Set()).add(e));
-    box.innerHTML = groupedEvents(label, [...groups].map(([name, joined]) => [name, joined]), 'Gösterilecek çalışma grubu yok.');
+    box.innerHTML = groupedEvents(label, [...groups].map(([name, joined]) => [name, joined]), 'Gösterilecek çalışma grubu yok.', true);
     return;
   }
   if (byPartner) {
@@ -310,10 +327,9 @@ function renderBreakdown() {
   if (byEvent) {
     const rows = list.filter(e => weight(e) > 0).sort((a, b) => weight(b) - weight(a) || b.start.localeCompare(a.start));
     const unit = openStat === 'teachers' ? 'öğretmen' : 'öğrenci';
+    const shown = limited(openStat, rows, e => resultItem(e, `${weight(e).toLocaleString('tr-TR')} ${unit}`));
     box.innerHTML = `<p>${label} · ayrıntı için tıklayın</p>`
-      + `<div class="stat-events">${rows.length
-        ? rows.map(e => resultItem(e, `${weight(e).toLocaleString('tr-TR')} ${unit}`)).join('')
-        : '<div class="empty">Gösterilecek etkinlik yok.</div>'}</div>`;
+      + `<div class="stat-events">${rows.length ? shown.html : '<div class="empty">Gösterilecek etkinlik yok.</div>'}</div>${shown.more}`;
     return;
   }
   const counts = new Map(all ? all().map(value => [value, 0]) : []);
@@ -322,13 +338,15 @@ function renderBreakdown() {
   const active = $(select).value;
   /* Seçili değerin etkinlikleri, en yenisi başta, hemen altında listelenir. */
   const chosen = active ? list.filter(e => values(e).includes(active)).sort((a, b) => b.start.localeCompare(a.start)) : [];
+  /* Seçili değer kısaltılan kısımda kalsa da görünsün diye başa alınır. */
+  const pills = limited(openStat, active ? [...rows.filter(([value]) => value === active), ...rows.filter(([value]) => value !== active)] : rows,
+    ([value, count]) => `<button type="button" class="stat-pill" data-filter="${openStat}" data-value="${escapeHtml(value)}" aria-pressed="${value === active}">${escapeHtml(value)} <b>${count.toLocaleString('tr-TR')}</b></button>`);
+  const events = limited(`${openStat}:${active}`, chosen, e => resultItem(e));
   box.innerHTML = `<p>${label}${active ? ' · seçimi kaldırmak için tekrar tıklayın' : ' · süzmek için tıklayın'}</p>`
-    + (rows.length
-      ? `<div class="stat-pills">${rows.map(([value, count]) => `<button type="button" class="stat-pill" data-filter="${openStat}" data-value="${escapeHtml(value)}" aria-pressed="${value === active}">${escapeHtml(value)} <b>${count.toLocaleString('tr-TR')}</b></button>`).join('')}</div>`
-      : '<p>Gösterilecek etkinlik yok.</p>')
+    + (rows.length ? `<div class="stat-pills">${pills.html}</div>${pills.more}` : '<p>Gösterilecek etkinlik yok.</p>')
     + (active
-      ? `<div class="stat-events"><p>${escapeHtml(active)} · ${chosen.length} etkinlik${chosen.length > MAX_STAT_EVENTS ? ` (en yenisinden ${MAX_STAT_EVENTS} tanesi)` : ''}</p>`
-        + (chosen.length ? chosen.slice(0, MAX_STAT_EVENTS).map(resultItem).join('') : '<div class="empty">Bu seçimde etkinlik yok.</div>') + '</div>'
+      ? `<div class="stat-events"><p>${escapeHtml(active)} · ${chosen.length} etkinlik</p>`
+        + (chosen.length ? events.html : '<div class="empty">Bu seçimde etkinlik yok.</div>') + `</div>${events.more}`
       : '');
 }
 
@@ -338,7 +356,12 @@ $('#mine').addEventListener('change', () => { if (meta) render(); });
 document.querySelector('.hero-stats').addEventListener('click', event => {
   if (event.target.closest('#stat-clear')) return clearFilters();
   const stat = event.target.closest('[data-stat]');
-  if (stat) { openStat = openStat === stat.dataset.stat ? null : stat.dataset.stat; return meta && render(); }
+  if (stat) { openStat = openStat === stat.dataset.stat ? null : stat.dataset.stat; expandedLists.clear(); return meta && render(); }
+  const more = event.target.closest('[data-more]');
+  if (more) {
+    if (!expandedLists.delete(more.dataset.more)) expandedLists.add(more.dataset.more);
+    return meta && render();
+  }
   const pill = event.target.closest('[data-filter]');
   if (!pill || !meta) return;
   const field = $(statFilters[pill.dataset.filter].select);
@@ -401,14 +424,11 @@ function renderSubtypes(checked) {
   for (const box of form.querySelectorAll('[name="subtypes"]')) box.checked = checked.includes(box.value);
 }
 
-/** Kapsama ve katılım biçimine göre il / ortak il / yer alanlarını açar. */
+/** Kapsama ve katılım biçimine göre il ve yer alanlarını açar. */
 function applyChoices() {
   const form = $('#event-form'), scope = form.elements.scope.value, online = form.elements.online.value === '1';
-  $('#city-field').hidden = scope !== 'İl';
-  $('#cities-field').hidden = scope !== 'Ortak iller';
+  $('#cities-field').hidden = scope !== meta.scopes[2];
   $('#location-field').hidden = online;
-  /* Çalışma grupları yalnızca "çalışma grubu etkinliği" işaretliyse sorulur. */
-  $('#groups-field').hidden = !form.elements.group_event.checked;
   form.elements.location.required = !online;
   $('#cities-count').textContent = `(${checkedValues(form, 'cities').length} il seçildi)`;
 }
@@ -503,7 +523,7 @@ function editEvent(event) {
   /* Yeni kayıt kenar çubuğundaki süzgeçlerle önceden doldurulur. */
   const value = event || {
     category: $('#category').value, subtypes: $('#subtype').value ? `|${$('#subtype').value}|` : '', work_groups: theme ? `|${theme}|` : '',
-    scope: own || meta.cities.includes(place) ? 'İl' : place, cities: `|${own || place}|`,
+    scope: own || meta.cities.includes(place) ? meta.scopes[2] : place, cities: `|${own || place}|`,
     status: 'Planlandı', online: 0,
   };
   form.elements.id.value = event?.id || '';
@@ -514,16 +534,12 @@ function editEvent(event) {
   partnersOf(value).forEach(addPartnerRow);
   form.elements.online.value = value.online ? '1' : '0';
   const chosen = listOf(value.cities);
-  form.elements.city.value = own || chosen[0] || '';
-  if (!form.elements.city.value) form.elements.city.selectedIndex = 0;
-  /* İl yöneticisi yalnızca kendi ilini içeren il / ortak il etkinliği
+  /* İl yöneticisi yalnızca kendi ilini içeren bölgesel / yerel etkinlik
      kaydeder: kendi ili kilitlenir, ulusal ve uluslararası kapsam kapanır. */
-  form.elements.city.disabled = !!own;
-  for (const input of form.elements.scope) input.disabled = !!own && !['İl', 'Ortak iller'].includes(input.value);
+  for (const input of form.elements.scope) input.disabled = !!own && input.value !== meta.scopes[2];
   for (const box of form.querySelectorAll('[name="cities"]')) { box.checked = chosen.includes(box.value) || box.value === own; box.disabled = box.value === own; }
   renderSubtypes(listOf(value.subtypes));
   for (const box of form.querySelectorAll('[name="work_groups"]')) box.checked = listOf(value.work_groups).includes(box.value);
-  form.elements.group_event.checked = !!listOf(value.work_groups).length;
   applyChoices();
   /* Etkinlikler gün bazlıdır: saat sorulmaz, bitiş günü kullanıcıya son gün
      olarak yazılır (veride ertesi günün 00:00'ı durur). Saatli eski kayıtlar
@@ -795,12 +811,7 @@ $('#report-form').onsubmit = submitHandler(async form => {
 $('#event-form').addEventListener('change', event => {
   const form = event.currentTarget, { name, value } = event.target;
   if (name === 'category') renderSubtypes(checkedValues(form, 'subtypes'));
-  /* Ortak ile geçerken seçili il başlangıç işareti olur. */
-  if (name === 'scope' && value === 'Ortak iller' && !checkedValues(form, 'cities').length) {
-    const box = [...form.querySelectorAll('[name="cities"]')].find(b => b.value === form.elements.city.value);
-    if (box) box.checked = true;
-  }
-  if (['scope', 'online', 'cities', 'group_event'].includes(name)) applyChoices();
+  if (['scope', 'online', 'cities'].includes(name)) applyChoices();
 });
 $('#cities-search').addEventListener('input', filterCities);
 $('#event-form').addEventListener('input', event => { if (['students', 'teachers', 'others'].includes(event.target.name)) updatePeopleTotal(); });
@@ -839,11 +850,8 @@ $('#event-form').onsubmit = submitHandler(async form => {
   const data = Object.fromEntries(new FormData(form));
   data.all_day = true;
   /* Devre dışı alanlar ve çoklu seçimler FormData'dan eksiksiz gelmez. */
-  data.city = form.elements.city.value;
   data.subtypes = checkedValues(form, 'subtypes');
-  data.work_groups = form.elements.group_event.checked ? checkedValues(form, 'work_groups') : [];
-  delete data.group_event;
-  if (form.elements.group_event.checked && !data.work_groups.length) throw Error('Çalışma grubu etkinliği için en az bir çalışma grubu seçin.');
+  data.work_groups = checkedValues(form, 'work_groups');
   data.cities = checkedValues(form, 'cities');
   data.online = form.elements.online.value === '1';
   data.partners = readPartners();
@@ -884,9 +892,8 @@ async function init() {
     /* Pasif çalışma grupları ileride açılacak: görünür ama seçilemez. */
     $('#group-checks').innerHTML = meta.groups.map(value => checkbox('work_groups', value)).join('') + meta.passiveGroups.map(value => checkbox('work_groups', value, true)).join('');
     $('#scope-cards').innerHTML = radioCards('scope', meta.scopes);
-    $('#event-form [name=city]').innerHTML = options(sorted);
     $('#city-checks').innerHTML = sorted.map(city => checkbox('cities', city)).join('');
-    $('#event-form [name=status]').innerHTML = options(meta.statuses);
+    $('#status-cards').innerHTML = radioCards('status', meta.statuses);
     $('#user-form [name=city]').innerHTML = options(sorted, 'Merkez (tüm iller)');
     await Promise.all([reload(), loadTotals()]);
   } catch (error) {
