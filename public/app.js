@@ -240,7 +240,7 @@ function monthGrid(first, list, titled) {
 /** Kaydı giren: "Ankara / Tugay Şahin"; adı girilmemiş hesapta yalnızca yetki alanı. */
 /* Merkez yöneticisinin yetki alanı bir il değil; listelerde YEĞİTEK yazar. */
 const ownerCity = e => e.owner_city || 'YEĞİTEK';
-const ownerLabel = e => [ownerCity(e), e.owner_name].filter(Boolean).join(' / ');
+const ownerLabel = e => [ownerCity(e), fullName({ first_name: e.owner_first, last_name: e.owner_last })].filter(Boolean).join(' / ');
 
 /* `note`: başlığın yanında vurgulanan kısa bilgi (ör. katılımcı sayısı). */
 const resultItem = (e, note) => `<button class="agenda-item ${statusClass(e.status)}" data-event="${e.id}"><span class="agenda-date">${escapeHtml(e.start.slice(8, 10) + '.' + e.start.slice(5, 7))}<small>${escapeHtml(e.start.slice(0, 4))}</small></span><span class="agenda-body"><strong>${escapeHtml(e.title)}${typeof note === 'string' ? ` <em class="agenda-note">${escapeHtml(note)}</em>` : ''}</strong><small>${escapeHtml([e.city, subtypeLabel(e), locationLabel(e)].join(' · '))}</small><small>${escapeHtml(e.status)} · Giren: ${escapeHtml(ownerLabel(e))}</small></span></button>`;
@@ -620,7 +620,11 @@ function generatePassword() {
   return [...crypto.getRandomValues(new Uint32Array(16))].map(n => alphabet[n % alphabet.length]).join('');
 }
 
-const fullName = row => [row.first_name, row.last_name].filter(Boolean).join(' ');
+/** Sunucudaki nameOf ile aynı yazım (bkz. lib/users.mjs): ad ilk harfleri
+    büyük, soyad tamamen büyük. Eski kayıtların karışık yazımı da düzelir. */
+const titleCase = value => String(value || '').trim().split(/\s+/).filter(Boolean)
+  .map(word => word.slice(0, 1).toLocaleUpperCase('tr-TR') + word.slice(1).toLocaleLowerCase('tr-TR')).join(' ');
+const fullName = row => [titleCase(row.first_name), String(row.last_name || '').trim().toLocaleUpperCase('tr-TR')].filter(Boolean).join(' ');
 
 /* Listede satırın verisi; "Ad soyad" penceresi mevcut değerlerle açılsın diye. */
 let userRows = [];

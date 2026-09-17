@@ -455,10 +455,10 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
     const yeniId = (await yeni.json()).id;
     const bursaCookie = await login('10000000146', 'bursa-parola-123');
     const bursaMeta = (await (await request('/api/meta', 'GET', null, bursaCookie)).json()).user;
-    assert.equal(bursaMeta.name, 'Ayşe Nur Yılmaz', 'girişte ad soyad gösterilir');
+    assert.equal(bursaMeta.name, 'Ayşe Nur YILMAZ', 'girişte ad soyad gösterilir: soyad büyük harfle');
     assert.equal(bursaMeta.username, '10000000146');
     assert.equal((await request('/api/users/' + yeniId, 'PUT', { firstName: 'Ayşe', lastName: 'Demir' }, cookie)).status, 200);
-    assert.equal((await (await request('/api/meta', 'GET', null, bursaCookie)).json()).user.name, 'Ayşe Demir', 'ad değişince oturum açık kalır');
+    assert.equal((await (await request('/api/meta', 'GET', null, bursaCookie)).json()).user.name, 'Ayşe DEMİR', 'ad değişince oturum açık kalır');
     assert.equal((await (await request('/api/meta', 'GET', null, cookie)).json()).user.name, 'admin', 'adı olmayan eski hesap kullanıcı adıyla görünür');
     assert.equal((await request('/api/events', 'POST', { ...sample, cities: ['Bursa'] }, bursaCookie)).status, 201);
 

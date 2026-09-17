@@ -32,7 +32,8 @@ const SESSION_HOURS = 8;
 /* Kaydı girenin adı ve ili alt sorgularla gelir: JOIN, users.city ile
    events.city'yi çakıştırıp süzme ve arama koşullarını bozardı. Ad soyad
    girilmemiş hesap için boş döner; T.C. kimlik numarası bilerek gönderilmez. */
-const OWNER_FIELDS = `,(SELECT TRIM(COALESCE(u.first_name,'') || ' ' || COALESCE(u.last_name,'')) FROM users u WHERE u.id = events.owner) AS owner_name`
+const OWNER_FIELDS = `,(SELECT u.first_name FROM users u WHERE u.id = events.owner) AS owner_first`
+  + `,(SELECT u.last_name FROM users u WHERE u.id = events.owner) AS owner_last`
   + `,(SELECT u.city FROM users u WHERE u.id = events.owner) AS owner_city`;
 const FIELDS = 'id,title,scope,city,cities,category,subtypes,work_groups,theme,start,"end",all_day,online,location,purpose,description,status,students,teachers,others,partners,owner,updated' + OWNER_FIELDS;
 
