@@ -33,7 +33,7 @@ function unzip(buffer) {
 }
 
 const merkez = { city: null };
-const sample = { title: 'Yapay zekâ tanışma toplantısı', scope: 'İl', city: 'Ankara', category: GROUP_KIND, subtypes: ['Yapay Zekâ'], start: '2026-09-16T09:00', end: '2026-09-17T11:00', online: false, location: 'Bilim merkezi', description: 'Deneme kaydı', status: 'Planlandı', students: 40, teachers: '3', others: '', purpose: 'Akranlarla tanışmak', partners: [{ person: 'Ayşe Yılmaz', org: 'Bilim Merkezi' }, { person: ' ', org: '' }] };
+const sample = { title: 'Yapay zekâ tanışma toplantısı', scope: 'İl', city: 'Ankara', category: 'Diğer', subtypes: [], work_groups: ['Yapay Zekâ'], start: '2026-09-16T09:00', end: '2026-09-17T11:00', online: false, location: 'Bilim merkezi', description: 'Deneme kaydı', status: 'Planlandı', students: 40, teachers: '3', others: '', purpose: 'Akranlarla tanışmak', partners: [{ person: 'Ayşe Yılmaz', org: 'Bilim Merkezi' }, { person: ' ', org: '' }] };
 const ortak = { ...sample, title: 'Ortak robotik atölyesi', scope: 'Ortak iller', cities: ['Manisa', 'İzmir'], start: '2026-10-05T10:00', end: '2026-10-05T12:00', online: true, location: '' };
 
 test('il, tema ve tür listeleri', () => {
@@ -41,18 +41,20 @@ test('il, tema ve tür listeleri', () => {
   assert.deepEqual(places.slice(0, 2), [INTERNATIONAL, NATIONWIDE]);
   assert.equal(places.length, 83);
   assert.ok(groups.includes('Espor') && !groups.includes('Genel'));
-  assert.equal(categories.length, 4);
+  assert.equal(categories.length, 3);
   for (const kind of categories) assert.ok(Array.isArray(subtypes[kind]), kind + ' alt seçenekleri');
   assert.ok(subtypes['Temel GençTek etkinliği'].includes('Genç Gölge'));
   assert.deepEqual(subtypes['Diğer'], [], '"Diğer" türünde alt tür sorulmaz');
-  assert.deepEqual(subtypes[GROUP_KIND], groups);
+  assert.ok(!categories.includes(GROUP_KIND), 'çalışma grubu artık tür değil');
 });
 
 test('alt tür süzgeci', () => {
   assert.ok(validFilters({ category: 'Temel GençTek etkinliği', subtype: 'Genç Gölge' }));
   assert.ok(!validFilters({ subtype: 'Genç Gölge' }), 'tür seçilmeden alt tür olmaz');
   assert.ok(!validFilters({ category: 'Temel GençTek etkinliği', subtype: 'Robotik' }), 'başka türün alt türü');
-  assert.ok(!validFilters({ category: GROUP_KIND, subtype: 'Robotik' }), 'çalışma grubu ayrı süzgeçte');
+  assert.ok(!validFilters({ category: GROUP_KIND }), 'eski tür süzülmez');
+  assert.ok(validFilters({ theme: 'Robotik' }));
+  assert.deepEqual(filterSql({ theme: 'Robotik' }), { clauses: ['work_groups LIKE ?'], params: ['%|Robotik|%'] });
   assert.ok(!validFilters({ theme: 'Engelsiz Bilişim' }), 'pasif grup süzülmez');
   const { clauses, params } = filterSql({ category: 'Temel GençTek etkinliği', subtype: 'Genç Gölge' });
   assert.deepEqual(clauses, ['category=?', 'subtypes LIKE ?']);
@@ -79,8 +81,14 @@ test('etkinlik doğrulama', () => {
   const event = validateEvent(sample, merkez);
   assert.equal(event.city, 'Ankara');
   assert.equal(event.cities, '|Ankara|');
-  assert.equal(event.subtypes, '|Yapay Zekâ|');
+  assert.equal(event.subtypes, '||');
+  assert.equal(event.work_groups, '|Yapay Zekâ|');
   assert.equal(event.theme, 'Yapay Zekâ');
+  const both = validateEvent({ ...sample, category: 'Temel GençTek etkinliği', subtypes: ['Genç Gölge'], work_groups: ['Robotik', 'Espor'] }, merkez);
+  assert.deepEqual([both.subtypes, both.work_groups, both.theme], ['|Genç Gölge|', '|Robotik|Espor|', 'Robotik, Espor'], 'tür ve çalışma grubu birlikte');
+  assert.equal(validateEvent({ ...sample, work_groups: [] }, merkez).theme, 'Genel', 'çalışma grubu isteğe bağlı');
+  assert.throws(() => validateEvent({ ...sample, work_groups: ['Engelsiz Bilişim'] }, merkez), ValidationError, 'pasif grup seçilemez');
+  assert.throws(() => validateEvent({ ...sample, category: GROUP_KIND }, merkez), ValidationError, 'eski tür kabul edilmez');
   assert.deepEqual([event.students, event.teachers, event.others], [40, 3, 0]);
   assert.equal(event.purpose, 'Akranlarla tanışmak');
   assert.deepEqual(JSON.parse(event.partners), [{ person: 'Ayşe Yılmaz', org: 'Bilim Merkezi' }], 'boş paydaş satırı atılır');
@@ -88,11 +96,11 @@ test('etkinlik doğrulama', () => {
   assert.throws(() => validateEvent({ ...sample, purpose: 'a'.repeat(2001) }, merkez), ValidationError);
   assert.throws(() => validateEvent({ ...sample, start: '2026-02-30T09:00' }, merkez), ValidationError);
   assert.throws(() => validateEvent({ ...sample, end: sample.start }, merkez), ValidationError);
-  assert.throws(() => validateEvent({ ...sample, subtypes: [] }, merkez), ValidationError, 'alt seçenek zorunlu');
-  assert.throws(() => validateEvent({ ...sample, subtypes: ['Olmayan grup'] }, merkez), ValidationError);
-  assert.throws(() => validateEvent({ ...sample, category: 'Temel GençTek etkinliği' }, merkez), ValidationError, 'grup, başka türün alt seçeneği olamaz');
+  assert.throws(() => validateEvent({ ...sample, category: 'Temel GençTek etkinliği', subtypes: [] }, merkez), ValidationError, 'alt seçenek zorunlu');
+  assert.throws(() => validateEvent({ ...sample, subtypes: ['Robotik'] }, merkez), ValidationError, 'grup, alt tür olamaz');
+  assert.throws(() => validateEvent({ ...sample, work_groups: ['Olmayan grup'] }, merkez), ValidationError);
   assert.equal(validateEvent({ ...sample, category: 'Temel GençTek etkinliği', subtypes: ['Sahne Senin', 'Genç Gölge'] }, merkez).subtypes, '|Genç Gölge|Sahne Senin|', 'liste sırasıyla saklanır');
-  assert.equal(validateEvent({ ...sample, category: 'İl etkinliği', subtypes: [] }, merkez).theme, 'Genel', 'listesi boş türde alt seçenek istenmez');
+  assert.equal(validateEvent({ ...sample, category: 'İl etkinliği', subtypes: [] }, merkez).subtypes, '||', 'listesi boş türde alt seçenek istenmez');
   assert.throws(() => validateEvent({ ...sample, category: 'İl etkinliği', subtypes: ['Atölye'] }, merkez), ValidationError, 'eski tür adı kabul edilmez');
   assert.throws(() => validateEvent({ ...sample, status: 'Belirsiz' }, merkez), ValidationError);
   assert.equal(validateEvent({ ...sample, status: 'Tamamlandı' }, merkez).status, 'Tamamlandı');
@@ -118,16 +126,18 @@ test('eski grup / tür adları açılışta yeni listelere uydurulur', async () 
     const insert = (title, category, subs, theme) => db.run(`INSERT INTO events(title,scope,city,cities,category,subtypes,theme,start,"end",location,description,owner,updated) VALUES(?,'İl','Konya','|Konya|',?,?,?,'2026-09-01T09:00','2026-09-01T10:00','Salon','',1,'t')`, [title, category, subs, theme]);
     await insert('yeniden adlanan grup', GROUP_KIND, '|Yapay Zeka|Espor|', 'Yapay Zeka, Espor');
     await insert('türü değişen', GROUP_KIND, '|Tek Maraton|', 'Tek Maraton');
+    await insert('türü eski, alt türü grup', 'Temel GençTek etkinliği', '|Genç Gölge|Robotik|', 'Genel');
     await insert('karşılıksız', 'Temel GençTek etkinliği', '|Tanışma toplantısı|', 'Genel');
     await insert('güncel', 'Temel GençTek etkinliği', '|Genç Gölge|', 'Genel');
     await db.close();
     for (let round = 0; round < 2; round++) { db = await openDb({ url: '', dir }); if (round === 0) await db.close(); }
-    const rows = Object.fromEntries((await db.all('SELECT title,category,subtypes,theme FROM events')).map(r => [r.title, [r.category, r.subtypes, r.theme]]));
+    const rows = Object.fromEntries((await db.all('SELECT title,category,subtypes,work_groups,theme FROM events')).map(r => [r.title, [r.category, r.subtypes, r.work_groups, r.theme]]));
     await db.close();
-    assert.deepEqual(rows['yeniden adlanan grup'], [GROUP_KIND, '|Espor|Yapay Zekâ|', 'Espor, Yapay Zekâ']);
-    assert.deepEqual(rows['türü değişen'], ['Temel GençTek etkinliği', '|Tek Maraton / Eğitim Teknolojileri Fikir Maratonu|', 'Genel']);
-    assert.deepEqual(rows['karşılıksız'], ['Temel GençTek etkinliği', '||', 'Genel']);
-    assert.deepEqual(rows['güncel'], ['Temel GençTek etkinliği', '|Genç Gölge|', 'Genel']);
+    assert.deepEqual(rows['yeniden adlanan grup'], ['Diğer', '||', '|Espor|Yapay Zekâ|', 'Espor, Yapay Zekâ'], 'çalışma grubu etkinliği Diğer türüne geçer');
+    assert.deepEqual(rows['türü değişen'], ['Temel GençTek etkinliği', '|Tek Maraton / Eğitim Teknolojileri Fikir Maratonu|', '||', 'Genel']);
+    assert.deepEqual(rows['türü eski, alt türü grup'], ['Temel GençTek etkinliği', '|Genç Gölge|', '|Robotik|', 'Robotik']);
+    assert.deepEqual(rows['karşılıksız'], ['Temel GençTek etkinliği', '||', '||', 'Genel']);
+    assert.deepEqual(rows['güncel'], ['Temel GençTek etkinliği', '|Genç Gölge|', '', 'Genel']);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -171,15 +181,16 @@ test('il yöneticisi yalnızca kendi ilini içeren etkinlikleri planlar', () => 
 });
 
 test('ICS çıktısı', () => {
-  const text = buildIcs([{ ...sample, subtypes: '|Yapay Zekâ|', id: 7, updated: '2026-09-01T10:00:00.000Z', all_day: 0 }], { host: 'takvim.test' });
+  const text = buildIcs([{ ...sample, subtypes: '||', work_groups: '|Yapay Zekâ|', id: 7, updated: '2026-09-01T10:00:00.000Z', all_day: 0 }], { host: 'takvim.test' });
   assert.match(text, /BEGIN:VEVENT/);
   assert.match(text, /UID:etkinlik-7@takvim\.test/);
   assert.match(text, /DTSTART:20260916T060000Z/); // 09:00 TR = 06:00 UTC
   assert.match(text, /STATUS:CONFIRMED/);
-  assert.match(text, /CATEGORIES:Çalışma grubu etkinliği/);
+  assert.match(text, /CATEGORIES:Diğer/);
+  assert.match(text.replace(/\r\n /g, ''), /Çalışma grubu: Yapay Zekâ/);
   assert.doesNotMatch(text, /\r\nURL:/);
   assert.ok(text.split('\r\n').every(line => Buffer.byteLength(line) <= 75));
-  const allDay = buildIcs([{ ...sample, subtypes: '|Yapay Zekâ|', id: 8, updated: '2026-09-01T10:00:00.000Z', all_day: 1, start: '2026-09-16T00:00', end: '2026-09-19T00:00', status: 'İptal edildi' }], { host: 'takvim.test' });
+  const allDay = buildIcs([{ ...sample, subtypes: '||', id: 8, updated: '2026-09-01T10:00:00.000Z', all_day: 1, start: '2026-09-16T00:00', end: '2026-09-19T00:00', status: 'İptal edildi' }], { host: 'takvim.test' });
   assert.match(allDay, /DTSTART;VALUE=DATE:20260916/);
   assert.match(allDay, /DTEND;VALUE=DATE:20260919/);
   assert.match(allDay, /STATUS:CANCELLED/);
@@ -374,7 +385,7 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
     const sheetParts = unzip(Buffer.from(await excel.arrayBuffer()));
     for (const part of ['[Content_Types].xml', 'xl/workbook.xml', 'xl/styles.xml', 'xl/_rels/workbook.xml.rels']) assert.ok(sheetParts[part], part + ' pakette');
     const sheetXml = sheetParts['xl/worksheets/sheet1.xml'].toString('utf8');
-    for (const text of ['Etkinlik türü', 'Tamamlandı mı', 'Hayır', 'İlişkili olduğu temel etkinlik', 'Çalışma grupları', 'Yapay zekâ tanışma toplantısı', 'Çalışma grubu etkinliği', 'Yapay Zekâ', 'Ortak robotik atölyesi', 'Ayşe Yılmaz – Bilim Merkezi'])
+    for (const text of ['Etkinlik türü', 'Tamamlandı mı', 'Hayır', 'İlişkili olduğu temel etkinlik', 'Çalışma grupları', 'Yapay zekâ tanışma toplantısı', 'Diğer', 'Yapay Zekâ', 'Ortak robotik atölyesi', 'Ayşe Yılmaz – Bilim Merkezi'])
       assert.ok(sheetXml.includes(text), text + ' Excel\'de');
     const foto = await request('/api/rapor?bas=2026-09-01&bit=2026-10-31&bicim=zip', 'GET', null, cookie);
     assert.equal(foto.status, 200);

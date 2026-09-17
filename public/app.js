@@ -24,6 +24,7 @@ const statusClass = status => ({ 'Planlandı': 'is-planlandi', 'Tamamlandı': 'i
 const listOf = value => String(value || '').split('|').filter(Boolean);
 const locationLabel = e => (e.online ? 'Çevrim içi' : e.location);
 const subtypeLabel = e => listOf(e.subtypes).join(', ');
+const groupLabel = e => listOf(e.work_groups).join(', ');
 const partnersOf = e => { try { const value = JSON.parse(e.partners || '[]'); return Array.isArray(value) ? value : []; } catch { return []; } };
 const partnerLabel = p => [p.person, p.org].filter(Boolean).join(' – ');
 const MAX_PHOTOS = 5, MAX_PARTNERS = 20, MAX_DAY_EVENTS = 3;
@@ -103,10 +104,10 @@ function filtered(source = events, skip = '') {
     (!mine || e.owner === mine) &&
     (!state || e.status === state) &&
     (!place || (meta.scopes.includes(place) ? e.scope === place : listOf(e.cities).includes(place))) &&
-    (!theme || (e.category === meta.groupKind && listOf(e.subtypes).includes(theme))) &&
+    (!theme || listOf(e.work_groups).includes(theme)) &&
     (!kind || e.category === kind) &&
     (!sub || (e.category === kind && listOf(e.subtypes).includes(sub))) &&
-    (`${e.title} ${e.location} ${e.purpose} ${e.description} ${e.city} ${e.category} ${e.subtypes} ${partnersOf(e).map(partnerLabel).join(' ')}`.toLocaleLowerCase('tr-TR').includes(query)));
+    (`${e.title} ${e.location} ${e.purpose} ${e.description} ${e.city} ${e.category} ${e.subtypes} ${e.work_groups} ${partnersOf(e).map(partnerLabel).join(' ')}`.toLocaleLowerCase('tr-TR').includes(query)));
 }
 
 /** Sayaçların "tüm etkinlikler" kümesi. Ay değişince yeniden yüklenmez;
@@ -158,12 +159,12 @@ function feedUrl() {
 
 /** "Etkinlik alt türü" süzgeci formdaki alt türleri türlerine göre gruplu gösterir.
     Tür seçilmemişse hepsi listelenir; bir alt tür seçilince türü de kendiliğinden seçilir.
-    Çalışma grupları ayrı süzgeçte olduğundan burada yer almaz. */
+    Çalışma grupları türden bağımsızdır, ayrı süzgeçtedir. */
 function renderSubtypeFilter() {
   const keep = $('#subtype').value;
-  if (keep && !$('#category').value) $('#category').value = meta.categories.find(k => k !== meta.groupKind && (meta.subtypes[k] || []).includes(keep)) || '';
+  if (keep && !$('#category').value) $('#category').value = meta.categories.find(k => (meta.subtypes[k] || []).includes(keep)) || '';
   const kind = $('#category').value;
-  const kinds = (kind ? [kind] : meta.categories).filter(k => k !== meta.groupKind && (meta.subtypes[k] || []).length);
+  const kinds = (kind ? [kind] : meta.categories).filter(k => (meta.subtypes[k] || []).length);
   const all = kinds.flatMap(k => meta.subtypes[k]);
   $('#subtype').innerHTML = '<option value="">Tüm alt türler</option>' + kinds.map(k => `<optgroup label="${escapeHtml(k)}">${options(meta.subtypes[k])}</optgroup>`).join('');
   $('#subtype').value = all.includes(keep) ? keep : '';
@@ -235,7 +236,7 @@ function monthGrid(first, list, titled) {
     const extra = dayEvents.length - MAX_DAY_EVENTS, expanded = expandedDay === key;
     html += `<div class="day ${day.getMonth() !== first.getMonth() ? 'outside' : ''} ${key === nowString ? 'is-today' : ''}"><span class="day-number">${day.getDate()}</span>`
       + (extra > 0 ? `<button type="button" class="day-more" data-day-more="${key}">${expanded ? 'Daha az göster' : `+${extra} etkinlik daha`}</button>` : '')
-      + (expanded ? dayEvents : dayEvents.slice(0, MAX_DAY_EVENTS)).map(e => `<button class="event-chip ${statusClass(e.status)}" data-event="${e.id}" title="${escapeHtml([e.title, e.status, e.city, e.category, subtypeLabel(e)].join(' · '))}">${escapeHtml(e.title)}<span>${escapeHtml(placeLabel(e) + (e.category === meta.groupKind ? ' · ' + subtypeLabel(e) : ''))}</span></button>`).join('')
+      + (expanded ? dayEvents : dayEvents.slice(0, MAX_DAY_EVENTS)).map(e => `<button class="event-chip ${statusClass(e.status)}" data-event="${e.id}" title="${escapeHtml([e.title, e.status, e.city, e.category, subtypeLabel(e)].join(' · '))}">${escapeHtml(e.title)}<span>${escapeHtml(placeLabel(e) + (e.work_groups && listOf(e.work_groups).length ? ' · ' + groupLabel(e) : ''))}</span></button>`).join('')
       + '</div>';
   }
   return html + '</div>';
@@ -247,7 +248,7 @@ const resultItem = e => `<button class="agenda-item ${statusClass(e.status)}" da
     etkinlik türünden oluştuğunu adetleriyle listeler. Bir değere tıklamak
     kenar çubuğundaki ilgili süzgeci seçer; seçili değere tekrar tıklamak kaldırır.
     Birden çok ile / çalışma grubuna bağlı etkinlik her birinde ayrıca sayılır. */
-const groupsOf = e => (e.category === meta.groupKind ? listOf(e.subtypes) : []);
+const groupsOf = e => listOf(e.work_groups);
 const placesOf = e => (e.cities ? listOf(e.cities) : [e.scope]);
 const statFilters = {
   /* `all`: hiç etkinliği olmayan türler de listelenir (0 adetle). */
@@ -316,8 +317,10 @@ function showEvent(id) {
   $('#detail-time').textContent = timeLabel(selected);
   $('#detail-scope').textContent = selected.cities ? `${selected.scope}: ${selected.city}` : selected.scope;
   $('#detail-place').textContent = locationLabel(selected);
-  $('#detail-sub-label').textContent = selected.category === meta.groupKind ? 'Çalışma grupları' : 'Alt türler';
+  $('#detail-sub-row').hidden = !listOf(selected.subtypes).length;
   $('#detail-subtypes').textContent = subtypeLabel(selected);
+  $('#detail-groups-row').hidden = !listOf(selected.work_groups).length;
+  $('#detail-groups').textContent = groupLabel(selected);
   const people = [['students', 'öğrenci'], ['teachers', 'öğretmen'], ['others', 'diğer']].filter(([key]) => selected[key]).map(([key, label]) => `${selected[key].toLocaleString('tr-TR')} ${label}`);
   const total = (selected.students || 0) + (selected.teachers || 0) + (selected.others || 0);
   $('#detail-counts-row').hidden = !people.length;
@@ -353,10 +356,7 @@ const checkedValues = (form, name) => [...form.querySelectorAll(`[name="${name}"
 function renderSubtypes(checked) {
   const form = $('#event-form'), kind = form.elements.category.value;
   $('#subtypes-field').hidden = !(meta.subtypes[kind] || []).length;
-  $('#subtypes-legend').textContent = kind === meta.groupKind ? 'Çalışma grupları' : 'Alt türler';
-  /* Pasif çalışma grupları ileride açılacak: görünür ama seçilemez. */
-  $('#subtype-checks').innerHTML = (meta.subtypes[kind] || []).map(value => checkbox('subtypes', value)).join('')
-    + (kind === meta.groupKind ? meta.passiveGroups.map(value => checkbox('subtypes', value, true)).join('') : '');
+  $('#subtype-checks').innerHTML = (meta.subtypes[kind] || []).map(value => checkbox('subtypes', value)).join('');
   for (const box of form.querySelectorAll('[name="subtypes"]')) box.checked = checked.includes(box.value);
 }
 
@@ -366,6 +366,8 @@ function applyChoices() {
   $('#city-field').hidden = scope !== 'İl';
   $('#cities-field').hidden = scope !== 'Ortak iller';
   $('#location-field').hidden = online;
+  /* Çalışma grupları yalnızca "çalışma grubu etkinliği" işaretliyse sorulur. */
+  $('#groups-field').hidden = !form.elements.group_event.checked;
   form.elements.location.required = !online;
   $('#cities-count').textContent = `(${checkedValues(form, 'cities').length} il seçildi)`;
 }
@@ -459,7 +461,7 @@ function editEvent(event) {
   filterCities();
   /* Yeni kayıt kenar çubuğundaki süzgeçlerle önceden doldurulur. */
   const value = event || {
-    category: theme ? meta.groupKind : $('#category').value, subtypes: theme ? `|${theme}|` : $('#subtype').value ? `|${$('#subtype').value}|` : '',
+    category: $('#category').value, subtypes: $('#subtype').value ? `|${$('#subtype').value}|` : '', work_groups: theme ? `|${theme}|` : '',
     scope: own || meta.cities.includes(place) ? 'İl' : place, cities: `|${own || place}|`,
     status: 'Planlandı', online: 0,
   };
@@ -479,6 +481,8 @@ function editEvent(event) {
   for (const input of form.elements.scope) input.disabled = !!own && !['İl', 'Ortak iller'].includes(input.value);
   for (const box of form.querySelectorAll('[name="cities"]')) { box.checked = chosen.includes(box.value) || box.value === own; box.disabled = box.value === own; }
   renderSubtypes(listOf(value.subtypes));
+  for (const box of form.querySelectorAll('[name="work_groups"]')) box.checked = listOf(value.work_groups).includes(box.value);
+  form.elements.group_event.checked = !!listOf(value.work_groups).length;
   applyChoices();
   /* Etkinlikler gün bazlıdır: saat sorulmaz, bitiş günü kullanıcıya son gün
      olarak yazılır (veride ertesi günün 00:00'ı durur). Saatli eski kayıtlar
@@ -755,7 +759,7 @@ $('#event-form').addEventListener('change', event => {
     const box = [...form.querySelectorAll('[name="cities"]')].find(b => b.value === form.elements.city.value);
     if (box) box.checked = true;
   }
-  if (['scope', 'online', 'cities'].includes(name)) applyChoices();
+  if (['scope', 'online', 'cities', 'group_event'].includes(name)) applyChoices();
 });
 $('#cities-search').addEventListener('input', filterCities);
 $('#event-form').addEventListener('input', event => { if (['students', 'teachers', 'others'].includes(event.target.name)) updatePeopleTotal(); });
@@ -796,10 +800,13 @@ $('#event-form').onsubmit = submitHandler(async form => {
   /* Devre dışı alanlar ve çoklu seçimler FormData'dan eksiksiz gelmez. */
   data.city = form.elements.city.value;
   data.subtypes = checkedValues(form, 'subtypes');
+  data.work_groups = form.elements.group_event.checked ? checkedValues(form, 'work_groups') : [];
+  delete data.group_event;
+  if (form.elements.group_event.checked && !data.work_groups.length) throw Error('Çalışma grubu etkinliği için en az bir çalışma grubu seçin.');
   data.cities = checkedValues(form, 'cities');
   data.online = form.elements.online.value === '1';
   data.partners = readPartners();
-  if (!data.subtypes.length && meta.subtypes[data.category]?.length) throw Error(data.category === meta.groupKind ? 'En az bir çalışma grubu seçin.' : 'En az bir alt tür seçin.');
+  if (!data.subtypes.length && meta.subtypes[data.category]?.length) throw Error('En az bir alt tür seçin.');
   const saved = await api('api/events' + (data.id ? '/' + data.id : ''), { method: data.id ? 'PUT' : 'POST', body: JSON.stringify(data) });
   /* Fotoğraflardan biri yüklenemezse etkinlik kaydı yine durur; form artık
      bu kaydı düzenler, tekrar "Kaydet" yinelenen etkinlik açmaz. */
@@ -833,6 +840,8 @@ async function init() {
     const monthName = new Intl.DateTimeFormat('tr-TR', { month: 'long' });
     $('#month-pick').innerHTML = Array.from({ length: 12 }, (_, i) => `<option value="${i}">${monthName.format(new Date(2026, i, 1))}</option>`).join('');
     $('#kind-cards').innerHTML = radioCards('category', meta.categories);
+    /* Pasif çalışma grupları ileride açılacak: görünür ama seçilemez. */
+    $('#group-checks').innerHTML = meta.groups.map(value => checkbox('work_groups', value)).join('') + meta.passiveGroups.map(value => checkbox('work_groups', value, true)).join('');
     $('#scope-cards').innerHTML = radioCards('scope', meta.scopes);
     $('#event-form [name=city]').innerHTML = options(sorted);
     $('#city-checks').innerHTML = sorted.map(city => checkbox('cities', city)).join('');

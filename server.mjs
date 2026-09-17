@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { randomBytes, createHash } from 'node:crypto';
-import { cities, places, scopes, categories, subtypes, groups, passiveGroups, statuses, NATIONWIDE, INTERNATIONAL, GROUP_KIND, listOf, validFilters, filterSql, photoType, MAX_PHOTOS, MAX_PHOTO_BYTES, verifyPassword, hashPassword, checkPassword, validateEvent, validDay, daysBetween, dayString, ValidationError, MAX_RANGE_DAYS, SEARCH_LIMIT, FEED_LIMIT, MIN_PASSWORD } from './lib/data.mjs';
+import { cities, places, scopes, categories, subtypes, groups, passiveGroups, statuses, NATIONWIDE, INTERNATIONAL, listOf, validFilters, filterSql, photoType, MAX_PHOTOS, MAX_PHOTO_BYTES, verifyPassword, hashPassword, checkPassword, validateEvent, validDay, daysBetween, dayString, ValidationError, MAX_RANGE_DAYS, SEARCH_LIMIT, FEED_LIMIT, MIN_PASSWORD } from './lib/data.mjs';
 import { openDb } from './lib/db.mjs';
 import { listUsers, createUser, resetPassword, setCity, setName, removeUser, displayName } from './lib/users.mjs';
 import { buildIcs } from './lib/ics.mjs';
@@ -29,7 +29,7 @@ const basePath = (process.env.BASE_PATH || '').replace(/\/+$/, '');
    edilebildiği için ancak açıkça güvenilen bir kurulumda dikkate alınır. */
 const trustProxy = process.env.TRUST_PROXY === 'true';
 const SESSION_HOURS = 8;
-const FIELDS = 'id,title,scope,city,cities,category,subtypes,theme,start,"end",all_day,online,location,purpose,description,status,students,teachers,others,partners,owner,updated';
+const FIELDS = 'id,title,scope,city,cities,category,subtypes,work_groups,theme,start,"end",all_day,online,location,purpose,description,status,students,teachers,others,partners,owner,updated';
 
 const attempts = new Map();
 const digest = token => createHash('sha256').update(token).digest('hex');
@@ -68,9 +68,9 @@ async function photoArchive(events) {
   if (!entries.length) return entries;
   const index = events.filter(e => counts.get(e.id)).map(e => [
     `Klasör : ${folders.get(e.id)}`, `Etkinlik: ${e.title}`, `Tarih : ${e.start.slice(0, 10)} – ${e.end.slice(0, 10)}`,
-    `Kapsam : ${e.city}`, `Tür : ${e.category}${listOf(e.subtypes).length ? ' – ' + listOf(e.subtypes).join(', ') : ''}`,
+    `Kapsam : ${e.city}`, `Tür : ${e.category}${listOf(e.subtypes).length ? ' – ' + listOf(e.subtypes).join(', ') : ''}`, listOf(e.work_groups).length && `Çalışma grubu : ${listOf(e.work_groups).join(', ')}`,
     `Durum : ${e.status}`, `Fotoğraf: ${counts.get(e.id)}`,
-  ].join('\n')).join('\n\n');
+  ].filter(Boolean).join('\n')).join('\n\n');
   entries.unshift({ name: 'icindekiler.txt', data: Buffer.from('﻿' + index + '\n', 'utf8') });
   return entries;
 }
@@ -190,7 +190,7 @@ const server = createServer(async (req, res) => {
     if (url.pathname.startsWith('/api/')) res.setHeader('Cache-Control', 'no-store');
 
     if (url.pathname === '/api/meta' && req.method === 'GET')
-      return send(res, 200, { cities, places, scopes, categories, subtypes, groups, passiveGroups, groupKind: GROUP_KIND, statuses, nationwide: NATIONWIDE, international: INTERNATIONAL, maxRangeDays: MAX_RANGE_DAYS, minPassword: MIN_PASSWORD, user: user ? { id: user.id, username: user.username, name: displayName(user), city: user.city, central: !user.city } : null });
+      return send(res, 200, { cities, places, scopes, categories, subtypes, groups, passiveGroups, statuses, nationwide: NATIONWIDE, international: INTERNATIONAL, maxRangeDays: MAX_RANGE_DAYS, minPassword: MIN_PASSWORD, user: user ? { id: user.id, username: user.username, name: displayName(user), city: user.city, central: !user.city } : null });
 
     /* ---- Faaliyet raporu (Word / Excel) — yalnızca yöneticiler ----------
        Dönem `bas`–`bit` (iki gün dahil) ya da tek ay (`ay=2026-09`).
@@ -374,17 +374,17 @@ const server = createServer(async (req, res) => {
       const data = await body(req);
       if (id && typeof data.updated !== 'string') throw new ValidationError('Sürüm bilgisi eksik; sayfayı yenileyin.');
       const e = validateEvent(data, user);
-      const values = [e.title, e.scope, e.city, e.cities, e.category, e.subtypes, e.theme, e.start, e.end, e.all_day, e.online, e.location, e.purpose, e.description, e.status, e.students, e.teachers, e.others, e.partners];
+      const values = [e.title, e.scope, e.city, e.cities, e.category, e.subtypes, e.work_groups, e.theme, e.start, e.end, e.all_day, e.online, e.location, e.purpose, e.description, e.status, e.students, e.teachers, e.others, e.partners];
       if (id) {
         /* Eşzamanlı düzenleme denetimi: istemci okuduğu sürümü geri gönderir,
            arada başkası kaydettiyse değişiklik sessizce ezilmez. Sürüm koşulu
            UPDATE'in içinde: ayrı bir okuma-sonra-yazma, iki eşzamanlı istekte
            ikisini de geçirirdi. */
-        const changed = await db.run('UPDATE events SET title=?,scope=?,city=?,cities=?,category=?,subtypes=?,theme=?,start=?,"end"=?,all_day=?,online=?,location=?,purpose=?,description=?,status=?,students=?,teachers=?,others=?,partners=?,updated=?,updated_by=? WHERE id=? AND updated=? AND deleted_at IS NULL', [...values, now, user.id, id, data.updated]);
+        const changed = await db.run('UPDATE events SET title=?,scope=?,city=?,cities=?,category=?,subtypes=?,work_groups=?,theme=?,start=?,"end"=?,all_day=?,online=?,location=?,purpose=?,description=?,status=?,students=?,teachers=?,others=?,partners=?,updated=?,updated_by=? WHERE id=? AND updated=? AND deleted_at IS NULL', [...values, now, user.id, id, data.updated]);
         if (!changed) return send(res, 409, { error: 'Bu etkinliği siz açtıktan sonra başka bir yönetici güncelledi. Sayfayı yenileyip değişikliğinizi tekrar girin.' });
         return send(res, 200, { id, updated: now });
       }
-      const row = await db.get('INSERT INTO events(title,scope,city,cities,category,subtypes,theme,start,"end",all_day,online,location,purpose,description,status,students,teachers,others,partners,owner,updated,updated_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id', [...values, user.id, now, user.id]);
+      const row = await db.get('INSERT INTO events(title,scope,city,cities,category,subtypes,work_groups,theme,start,"end",all_day,online,location,purpose,description,status,students,teachers,others,partners,owner,updated,updated_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id', [...values, user.id, now, user.id]);
       return send(res, 201, { id: Number(row.id), updated: now });
     }
 

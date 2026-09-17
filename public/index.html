@@ -239,7 +239,7 @@
       <div class="choice-cards" id="kind-cards"></div>
     </fieldset>
     <fieldset class="choice" id="subtypes-field" hidden>
-      <legend><span id="subtypes-legend">Alt türler</span> <small>birden fazla seçilebilir</small></legend>
+      <legend>Alt türler <small>birden fazla seçilebilir</small></legend>
       <div class="check-grid" id="subtype-checks"></div>
     </fieldset>
     <fieldset class="choice">
@@ -251,6 +251,11 @@
       <legend>Ortak iller <small id="cities-count"></small></legend>
       <input id="cities-search" type="search" placeholder="İl ara…" aria-label="Ortak illerde ara">
       <div class="check-grid check-scroll" id="city-checks"></div>
+    </fieldset>
+    <label class="check"><input type="checkbox" name="group_event"> İlgili olduğu çalışma grubu etkinliği</label>
+    <fieldset class="choice" id="groups-field" hidden>
+      <legend>Çalışma grupları <small>birden fazla seçilebilir</small></legend>
+      <div class="check-grid" id="group-checks"></div>
     </fieldset>
     <label>Durum<select name="status" required></select></label>
     <div class="form-row">
@@ -299,7 +304,8 @@
     <div><dt>Tarih</dt><dd id="detail-time"></dd></div>
     <div><dt>Kapsam</dt><dd id="detail-scope"></dd></div>
     <div><dt>Yer</dt><dd id="detail-place"></dd></div>
-    <div><dt id="detail-sub-label">Alt türler</dt><dd id="detail-subtypes"></dd></div>
+    <div id="detail-sub-row"><dt>Alt türler</dt><dd id="detail-subtypes"></dd></div>
+    <div id="detail-groups-row"><dt>Çalışma grubu</dt><dd id="detail-groups"></dd></div>
     <div id="detail-counts-row"><dt>Katılımcılar</dt><dd id="detail-counts"></dd></div>
   </dl>
   <div id="detail-purpose-block" class="detail-block"><h3>Amaç</h3><p id="detail-purpose"></p></div>
