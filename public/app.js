@@ -178,8 +178,7 @@ function render() {
   const current = shownEvents();
   $('#count').textContent = `${ranged ? 'Seçilen aralıkta' : 'Bu ay'} ${current.length} etkinlik`;
   /* Sayaçlar varsayılan olarak tüm kayıtları, "Yalnızca görüntülenen ay"
-     seçiliyse o ayı anlatır; başlık hangisi olduğunu yazar. Ulusal /
-     uluslararası etkinlik bir ile bağlı olmadığı için il sayısına katılmaz.
+     seçiliyse o ayı anlatır; başlık hangisi olduğunu yazar.
      Süzgeçler ve arama metni her durumda uygulanır. */
   const counted = onlyMonth ? current : filtered(allEvents);
   $('#stat-caption').textContent = onlyMonth ? $('#month-title').textContent : 'Tüm etkinlikler';
@@ -187,8 +186,6 @@ function render() {
   /* Süzgeç yokken düğme durur ama pasiftir: kartların orada da görünsün. */
   $('#stat-clear').disabled = !anyFilter();
   for (const [key, stat] of Object.entries(statFilters)) $('#stat-' + key).textContent = statTotal(stat, counted);
-  const wide = counted.filter(e => !e.cities).length;
-  $('#stat-note').textContent = wide ? `İl sayısına ${wide} ulusal / uluslararası etkinlik katılmaz.` : '';
   renderBreakdown();
   $('#report').title = 'Seçeceğiniz dönemin etkinliklerini, seçili süzgeçlerle Word veya Excel olarak indirir';
   $('#feed-url').value = feedUrl();
