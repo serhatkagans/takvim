@@ -877,23 +877,28 @@ function renderReportMatches() {
   $('#report-matches-field').hidden = !matches;
   if (!matches) return;
   const date = e => `${e.start.slice(8, 10)}.${e.start.slice(5, 7)}.${e.start.slice(0, 4)}`;
-  $('#report-matches').innerHTML = matches.length
-    ? matches.map(e => `<label><input type="checkbox" name="ids" value="${e.id}"${reportSkipped.has(e.id) ? '' : ' checked'}> <span><b>${escapeHtml(e.title)}</b> <small>${escapeHtml(date(e))} · ${escapeHtml(e.city)} · ${escapeHtml(e.status)}</small></span></label>`).join('')
-    : '<p class="empty">Bu dönemde aramayla eşleşen etkinlik yok.</p>';
+  const info = e => `<span><b>${escapeHtml(e.title)}</b> <small>${escapeHtml(date(e))} · ${escapeHtml(e.city)} · ${escapeHtml(e.status)}</small></span>`;
   const { outside } = matches;
-  $('#report-outside').hidden = !outside.length;
-  $('#report-outside-text').textContent = `Seçilen dönemin dışında ${outside.length} eşleşme daha var: `
-    + outside.slice(0, 3).map(e => `${e.title} (${date(e)})`).join(', ') + (outside.length > 3 ? ` ve ${outside.length - 3} tane daha` : '') + '.';
+  /* Dönem dışındakiler aynı kutuda, seçilemez hâlde ve "Dönemi genişlet" düğmesiyle
+     görünür; ayrı bir not olarak kutunun altında kalınca gözden kaçıyordu. */
+  $('#report-matches').innerHTML = (matches.length
+    ? matches.map(e => `<label><input type="checkbox" name="ids" value="${e.id}"${reportSkipped.has(e.id) ? '' : ' checked'}> ${info(e)}</label>`).join('')
+    : `<p class="empty">Seçilen dönemde (${escapeHtml(date({ start: $('#report-form').elements.from.value }))} – ${escapeHtml(date({ start: $('#report-form').elements.to.value }))}) eşleşen etkinlik yok.</p>`)
+    + (outside.length
+      ? `<div class="report-outside"><p>Dönem dışında ${outside.length} eşleşme:</p>${outside.map(e => `<div class="report-outside-item">${info(e)}</div>`).join('')}`
+        + '<button type="button" class="button button-secondary" data-widen>Dönemi bunları kapsayacak şekilde genişlet</button></div>'
+      : '');
   $('#report-matches-count').textContent = `(${matches.filter(e => !reportSkipped.has(e.id)).length} / ${matches.length} işaretli)`;
 }
 
 /* Dönem, dışarıda kalan eşleşmeleri de kapsayacak kadar genişletilir. */
-$('#report-widen').onclick = () => {
+$('#report-matches').addEventListener('click', event => {
+  if (!event.target.closest('[data-widen]')) return;
   const form = $('#report-form'), { outside } = reportMatches();
   form.elements.from.value = [form.elements.from.value, ...outside.map(e => e.start.slice(0, 10))].sort()[0];
   form.elements.to.value = [form.elements.to.value, ...outside.map(lastDay)].sort().at(-1);
   renderReportMatches();
-};
+});
 
 $('#report-form').addEventListener('input', event => { if (['from', 'to', 'city', 'search'].includes(event.target.name)) renderReportMatches(); });
 $('#report-form').addEventListener('change', event => {

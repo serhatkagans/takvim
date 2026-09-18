@@ -241,7 +241,10 @@ dialog label.choice-card:has(input:disabled) { opacity: .5; cursor: not-allowed 
 dialog .report-matches { grid-template-columns: 1fr }
 dialog .report-matches label { align-items: flex-start }
 dialog .report-matches small { display: block; font-weight: 400; color: var(--color-text-muted) }
-.report-outside { margin: 0; font-size: .82rem; color: var(--color-text-muted) }
+dialog .report-matches .empty { margin: 0; padding: 8px 0; color: var(--color-text-muted) }
+.report-outside { display: grid; gap: 6px; justify-items: start; border-top: 1px dashed var(--color-border); padding-top: 8px; margin-top: 4px }
+.report-outside > p { margin: 0; font-size: .82rem; font-weight: 600; color: var(--color-text-muted) }
+.report-outside-item { font-size: .85rem; opacity: .75 }
 /* Kapsam kartlarıyla aynı genişlik: üç sütunluk ızgarada iki kart. */
 .city-toggles { grid-template-columns: repeat(3, minmax(0, 1fr)) }
 .check-scroll { max-height: 220px; overflow-y: auto; border: 1px solid var(--color-border); border-radius: 8px; padding: 8px 10px }
