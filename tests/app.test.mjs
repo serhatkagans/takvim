@@ -11,6 +11,7 @@ import { hashPassword, cities, places, groups, categories, subtypes, validateEve
 import { validTc, maskUsername } from '../lib/users.mjs';
 import { openDb } from '../lib/db.mjs';
 import { buildIcs } from '../lib/ics.mjs';
+import { validateForm, validateAnswers, accepting, targets } from '../lib/forms.mjs';
 
 /** Test için ZIP okuyucu: merkez dizinden dosyaları açar, CRC'yi doğrular. */
 function unzip(buffer) {
@@ -191,6 +192,61 @@ test('il yöneticisinin ili her zaman düzenleyenler arasındadır', () => {
   assert.throws(() => validateEvent({ ...ortak, cities: [] }, ilYoneticisi, 'Manisa'), ValidationError);
 });
 
+const anket = {
+  title: 'İl ihtiyaç analizi', description: 'Güz dönemi', audience: [], deadline: '',
+  questions: [
+    { id: 'ad', type: 'short', title: 'Koordinatör adı', required: true },
+    { id: 'gorus', type: 'long', title: 'Görüşleriniz' },
+    { id: 'tur', type: 'single', title: 'Öncelik', options: ['Robotik', 'Espor', 'Yapay Zekâ'], required: true },
+    { id: 'alan', type: 'multi', title: 'İlgi alanları', options: ['A', 'B', 'C'] },
+    { id: 'sayi', type: 'number', title: 'Öğrenci sayısı' },
+    { id: 'gun', type: 'date', title: 'Uygun gün' },
+  ],
+};
+
+test('form doğrulama', () => {
+  const form = validateForm(anket);
+  assert.equal(form.audience, '', 'boş hedef kitle: bütün il yöneticileri');
+  assert.equal(JSON.parse(form.questions).length, 6);
+  assert.equal(validateForm({ ...anket, audience: ['İzmir', 'Adana'] }).audience, '|Adana|İzmir|', 'iller liste sırasıyla saklanır');
+  assert.throws(() => validateForm({ ...anket, title: ' ' }), ValidationError);
+  assert.throws(() => validateForm({ ...anket, questions: [] }), /en az bir soru/);
+  assert.throws(() => validateForm({ ...anket, audience: ['Yok'] }), /geçersiz il/);
+  assert.throws(() => validateForm({ ...anket, deadline: '2026-02-30' }), /tarih/);
+  assert.throws(() => validateForm({ ...anket, questions: [{ id: 'a', type: 'single', title: 'x', options: [' '] }] }), /en az bir seçenek/);
+  assert.throws(() => validateForm({ ...anket, questions: [{ id: 'a', type: 'short', title: 'x' }, { id: 'a', type: 'short', title: 'y' }] }), /kimliği/, 'soru kimliği tekil');
+  assert.throws(() => validateForm({ ...anket, questions: [{ id: 'a', type: 'dosya', title: 'x' }] }), /türü/);
+  assert.equal(JSON.parse(validateForm({ ...anket, questions: [{ id: 'a', type: 'short', title: 'x', options: ['atılır'] }] }).questions)[0].options, undefined, 'metin sorusunda seçenek tutulmaz');
+
+  /* Biçimli başlık / açıklama: yalnızca özniteliksiz b i u ul ol li br. */
+  const rich = validateForm({ ...anket, titleRich: '<b>Güz</b> &amp; <i>bahar</i>', descriptionRich: 'Giriş<br><ul><li>bir</li><li><u>iki</u></li></ul>' });
+  assert.equal(rich.title, 'Güz & bahar', 'düz başlık biçimli hâlinden türetilir');
+  assert.equal(rich.description, 'Giriş\n• bir\n• iki');
+  assert.equal(rich.titleRich, '<b>Güz</b> &amp; <i>bahar</i>');
+  for (const bad of ['<b onclick="x">a</b>', '<script>x</script>', '<img src=x>', 'a & b', 'a < b', '<a href="x">a</a>'])
+    assert.throws(() => validateForm({ ...anket, titleRich: bad }), /biçim/, bad);
+  assert.throws(() => validateForm({ ...anket, titleRich: '<b> </b>' }), /boş/, 'yalnızca etiketten oluşan başlık boş sayılır');
+});
+
+test('yanıt doğrulama', () => {
+  const questions = JSON.parse(validateForm(anket).questions);
+  const answers = JSON.parse(validateAnswers(questions, { ad: ' Ayşe ', tur: 'Espor', alan: ['C', 'A', 'A'], sayi: '12,5', gun: '2026-10-01', fazladan: 'atılır', gorus: '' }));
+  assert.deepEqual(answers, { ad: 'Ayşe', tur: 'Espor', alan: ['A', 'C'], sayi: 12.5, gun: '2026-10-01' }, 'seçenek sırası formdaki gibi; boş ve fazladan alanlar atılır');
+  assert.throws(() => validateAnswers(questions, { tur: 'Espor' }), /zorunludur/);
+  assert.throws(() => validateAnswers(questions, { ad: 'A', tur: 'Yok' }), /geçersiz seçim/);
+  assert.throws(() => validateAnswers(questions, { ad: 'A', tur: 'Espor', alan: ['Z'] }), /geçersiz seçim/);
+  assert.throws(() => validateAnswers(questions, { ad: 'A', tur: 'Espor', sayi: 'on' }), /sayı/);
+  assert.throws(() => validateAnswers(questions, { ad: 'A', tur: 'Espor', gun: '2026-13-01' }), /tarih/);
+  assert.throws(() => validateAnswers(questions, { ad: 'x'.repeat(501), tur: 'Espor' }), /500/);
+
+  const now = new Date('2026-09-18T20:59:00Z'); /* İstanbul'da 18 Eylül 23:59 */
+  assert.ok(accepting({ closed: 0, deadline: '2026-09-18' }, now), 'son gün sonuna kadar açık');
+  assert.ok(!accepting({ closed: 0, deadline: '2026-09-18' }, new Date('2026-09-18T21:01:00Z')), 'ertesi gün kapalı');
+  assert.ok(!accepting({ closed: 1, deadline: '' }, now));
+  assert.ok(targets({ audience: '' }, 'Van') && !targets({ audience: '' }, null), 'merkez hedef kitlede değil');
+  assert.ok(targets({ audience: '|Van|' }, 'Van') && !targets({ audience: '|Van|' }, 'İzmir'));
+});
+
 test('ICS çıktısı', () => {
   const text = buildIcs([{ ...sample, subtypes: '|Diğer|', work_groups: '|Yapay Zekâ|', id: 7, updated: '2026-09-01T10:00:00.000Z', all_day: 0 }], { host: 'takvim.test' });
   assert.match(text, /BEGIN:VEVENT/);
@@ -221,7 +277,7 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
       const { default: pg } = await import('pg');
       const client = new pg.Client({ connectionString: backend.url });
       await client.connect();
-      await client.query('DROP TABLE IF EXISTS photos, sessions, events, users');
+      await client.query('DROP TABLE IF EXISTS form_responses, forms, photos, sessions, events, users');
       await client.end();
     }
     let db = await openDb({ url: backend.url || '', dir });
@@ -452,6 +508,170 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
     assert.equal((await db.get('SELECT CAST(count(*) AS INTEGER) AS n FROM events')).n, 5);
     assert.equal((await db.get('SELECT CAST(count(*) AS INTEGER) AS n FROM events WHERE deleted_at IS NOT NULL')).n, 1);
     await db.close();
+
+    /* Formlar: merkez hazırlar, il yöneticisi doldurur ve düzeltir, merkez yanıtları görür. */
+    assert.equal((await request('/api/forms', 'POST', anket, ilCookie)).status, 403, 'il yöneticisi form oluşturamaz');
+    const formCreated = await request('/api/forms', 'POST', anket, cookie);
+    assert.equal(formCreated.status, 201);
+    const form = await formCreated.json();
+    /* Yeni form taslaktır: il yöneticisi görmez, dolduramaz; yayımlanınca açılır. */
+    const publish = id => request(`/api/forms/${id}/durum`, 'PUT', { status: 'published' }, cookie);
+    assert.equal((await (await request('/api/forms/' + form.id, 'GET', null, cookie)).json()).state, 'draft');
+    assert.equal((await request('/api/forms/' + form.id, 'GET', null, ilCookie)).status, 404, 'taslak il yöneticisine görünmez');
+    assert.equal((await (await request('/api/forms', 'GET', null, ilCookie)).json()).length, 0);
+    assert.equal((await request(`/api/forms/${form.id}/durum`, 'PUT', { status: 'published' }, ilCookie)).status, 404, 'il yöneticisi taslağı göremez, yayımlayamaz');
+    assert.equal((await publish(form.id)).status, 200);
+    assert.equal((await (await request('/api/forms/' + form.id, 'GET', null, ilCookie)).json()).state, 'open');
+    const onlyVan = await (await request('/api/forms', 'POST', { ...anket, title: 'Yalnızca Van', audience: ['Van'] }, cookie)).json();
+    await publish(onlyVan.id);
+    assert.equal((await (await request('/api/meta', 'GET', null, ilCookie)).json()).pendingForms, 1, 'bekleyen form sayısı yalnızca hedef kitledekileri sayar');
+    const ilForms = await (await request('/api/forms', 'GET', null, ilCookie)).json();
+    assert.deepEqual(ilForms.map(f => f.id), [form.id], 'başka ile gönderilen form görünmez');
+    assert.equal((await request('/api/forms/' + onlyVan.id, 'GET', null, ilCookie)).status, 404);
+    assert.equal((await request(`/api/forms/${onlyVan.id}/yanit`, 'PUT', { answers: { ad: 'A', tur: 'Espor' } }, ilCookie)).status, 404);
+    assert.equal((await request(`/api/forms/${form.id}/yanitlar`, 'GET', null, ilCookie)).status, 403, 'il yöneticisi yanıtları göremez');
+
+    /* Kapak görseli: merkez yükler, hedef kitledeki il yöneticisi görür. */
+    const png = Buffer.from('89504e470d0a1a0a0000000d4948445200000001000000010806000000', 'hex');
+    const putImage = (id, data, cookie) => fetch(`${origin}/api/forms/${id}/gorsel`, { method: 'PUT', headers: { Origin: origin, 'Content-Type': 'image/png', Cookie: cookie }, body: data });
+    assert.equal((await request(`/api/forms/${form.id}/gorsel`, 'GET', null, ilCookie)).status, 404, 'görsel yokken 404');
+    assert.equal((await putImage(form.id, png, ilCookie)).status, 403, 'il yöneticisi görsel yükleyemez');
+    assert.equal((await putImage(form.id, Buffer.from('<svg/>'), cookie)).status, 400, 'yalnızca JPEG / PNG / WebP');
+    const uploaded = await putImage(form.id, png, cookie);
+    assert.equal(uploaded.status, 200);
+    const imageVersion = (await uploaded.json()).image;
+    assert.equal((await (await request('/api/forms/' + form.id, 'GET', null, ilCookie)).json()).image, imageVersion, 'form görsel sürümünü taşır');
+    const shown = await request(`/api/forms/${form.id}/gorsel?v=${imageVersion}`, 'GET', null, ilCookie);
+    assert.equal(shown.status, 200);
+    assert.equal(shown.headers.get('content-type'), 'image/png');
+    assert.deepEqual(Buffer.from(await shown.arrayBuffer()), png);
+    assert.equal((await request(`/api/forms/${onlyVan.id}/gorsel`, 'GET', null, ilCookie)).status, 404, 'kitlesi dışındaki formun görseli görünmez');
+    assert.equal((await request(`/api/forms/${form.id}/gorsel`, 'DELETE', null, cookie)).status, 200);
+    assert.equal((await (await request('/api/forms/' + form.id, 'GET', null, cookie)).json()).image, null);
+    assert.equal((await request(`/api/forms/${form.id}/yanit`, 'PUT', { answers: { ad: 'A', tur: 'Espor' } }, cookie)).status, 403, 'merkeze açık olmayan formu merkez doldurmaz');
+
+    /* "Merkez yöneticileri de doldursun" işaretli formu merkez de doldurur; bekleyenlerde "Merkez" görünür. */
+    const merkezli = await (await request('/api/forms', 'POST', { ...anket, title: 'Merkez de doldurur', centralFills: true }, cookie)).json();
+    await publish(merkezli.id);
+    const merkezliSonuc = await (await request(`/api/forms/${merkezli.id}/yanitlar`, 'GET', null, cookie)).json();
+    assert.ok(merkezliSonuc.pending.some(p => p.city === 'Merkez'), 'merkez yöneticisi bekleyenler arasında');
+    assert.equal(merkezliSonuc.form.centralFills, true);
+    assert.equal((await request(`/api/forms/${merkezli.id}/yanit`, 'PUT', { answers: { ad: 'Merkez', tur: 'Espor' } }, cookie)).status, 200);
+    const merkezYaniti = await (await request(`/api/forms/${merkezli.id}`, 'GET', null, cookie)).json();
+    assert.equal(merkezYaniti.answers.ad, 'Merkez', 'merkez kendi yanıtını görür');
+    assert.equal(merkezYaniti.responses, 1);
+    assert.equal((await request('/api/forms/' + merkezli.id, 'DELETE', null, cookie)).status, 200);
+
+    /* Bölüm, dosya sorusu, taslak ve hatırlatma. */
+    const bolumlu = await (await request('/api/forms', 'POST', { title: 'Faaliyet raporu', questions: [
+      { id: 'b1', type: 'section', title: 'Genel bilgiler' },
+      { id: 'sayi', type: 'number', title: 'Öğrenci sayısı', required: true },
+      { id: 'b2', type: 'section', title: '' },
+      { id: 'rapor', type: 'file', title: 'Rapor dosyası', required: true },
+    ] }, cookie)).json();
+    await publish(bolumlu.id);
+    assert.equal((await request('/api/forms', 'POST', { title: 'Yalnız bölüm', questions: [{ id: 'b1', type: 'section', title: 'x' }] }, cookie)).status, 400, 'yalnızca bölümden oluşan form olmaz');
+    const liste = await (await request('/api/forms', 'GET', null, ilCookie)).json();
+    assert.equal(liste.find(f => f.id === bolumlu.id).questionCount, 2, 'bölüm soru sayılmaz');
+
+    // Taslak: zorunlu boş kalabilir, hatalı sayı atılır
+    const taslak = await request(`/api/forms/${bolumlu.id}/taslak`, 'PUT', { answers: { sayi: '12a' } }, ilCookie);
+    assert.equal(taslak.status, 200);
+    assert.equal((await request(`/api/forms/${bolumlu.id}/taslak`, 'PUT', { answers: { sayi: '42' } }, ilCookie)).status, 200);
+    assert.deepEqual((await (await request('/api/forms/' + bolumlu.id, 'GET', null, ilCookie)).json()).draft.answers, { sayi: 42 });
+
+    // Hatırlatma: bekleyene gider, meta'da görünür
+    const hatir = await (await request(`/api/forms/${bolumlu.id}/hatirlat`, 'POST', {}, cookie)).json();
+    assert.ok(hatir.count >= 1);
+    assert.equal((await request(`/api/forms/${bolumlu.id}/hatirlat`, 'POST', {}, ilCookie)).status, 403, 'il yöneticisi hatırlatamaz');
+    assert.ok((await (await request('/api/meta', 'GET', null, ilCookie)).json()).reminders.some(r => r.id === bolumlu.id), 'hatırlatma takvimde görünür');
+    const bekleyen = (await (await request(`/api/forms/${bolumlu.id}/yanitlar`, 'GET', null, cookie)).json()).pending.find(p => p.city === 'İzmir');
+    assert.ok(bekleyen.remindedAt, 'bekleyenler listesinde hatırlatma zamanı');
+
+    // Dosya: tür uzantıdan, başkasının dosyası bağlanamaz, zorunlu dosya
+    const formUpload = (name, data, c, soru = 'rapor') => fetch(`${origin}/api/forms/${bolumlu.id}/dosya?soru=${soru}`, { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/octet-stream', 'X-File-Name': encodeURIComponent(name), Cookie: c }, body: data });
+    assert.equal((await formUpload('zararlı.exe', Buffer.from('MZ'), ilCookie)).status, 400, 'izin verilmeyen tür');
+    assert.equal((await formUpload('rapor.pdf', Buffer.from('%PDF'), ilCookie, 'sayi')).status, 400, 'dosya sorusu olmayan soruya yüklenmez');
+    assert.equal((await formUpload('rapor.pdf', Buffer.from('%PDF'), cookie)).status, 403, 'merkeze açık olmayan forma merkez yükleyemez');
+    const dosya = await (await formUpload('Faaliyet Raporu Ağustos.pdf', Buffer.from('%PDF-1.4 deneme'), ilCookie)).json();
+    assert.equal(dosya.name, 'Faaliyet Raporu Ağustos.pdf');
+    assert.equal((await request(`/api/forms/${bolumlu.id}/yanit`, 'PUT', { answers: { sayi: 5 } }, ilCookie)).status, 400, 'zorunlu dosya sorusu');
+    assert.equal((await request(`/api/forms/${bolumlu.id}/yanit`, 'PUT', { answers: { sayi: 5, rapor: [dosya.id + 999] } }, ilCookie)).status, 400, 'başkasının / olmayan dosya bağlanamaz');
+    const gonder = await request(`/api/forms/${bolumlu.id}/yanit`, 'PUT', { answers: { sayi: 5, rapor: [dosya.id] } }, ilCookie);
+    assert.equal(gonder.status, 200);
+    const bolumluSonuc = await (await request(`/api/forms/${bolumlu.id}/yanitlar`, 'GET', null, cookie)).json();
+    assert.deepEqual(bolumluSonuc.responses[0].answers.rapor, [{ id: dosya.id, name: 'Faaliyet Raporu Ağustos.pdf', size: 15 }], 'yanıtta dosya adı ve boyutu');
+    const sonrasi = await (await request('/api/forms/' + bolumlu.id, 'GET', null, ilCookie)).json();
+    assert.equal(sonrasi.draft, null, 'gönderince taslak silinir');
+    assert.ok(!(await (await request('/api/meta', 'GET', null, ilCookie)).json()).reminders.some(r => r.id === bolumlu.id), 'gönderince hatırlatma kalkar');
+    const indir = await request(`/api/forms/${bolumlu.id}/dosya/${dosya.id}`, 'GET', null, cookie);
+    assert.equal(indir.status, 200);
+    assert.match(indir.headers.get('content-disposition'), /^attachment;/, 'dosya her zaman ek olarak iner');
+    assert.equal(indir.headers.get('content-type'), 'application/pdf');
+    assert.equal(await indir.text(), '%PDF-1.4 deneme');
+    assert.equal((await request('/api/forms/' + bolumlu.id, 'DELETE', null, cookie)).status, 200);
+    assert.equal((await request(`/api/forms/${form.id}/yanit`, 'PUT', { answers: { ad: 'A' } }, ilCookie)).status, 400, 'zorunlu soru');
+    assert.equal((await request(`/api/forms/${form.id}/yanit`, 'PUT', { answers: { ad: 'Ayşe', tur: 'Espor', sayi: '40' } }, ilCookie)).status, 200);
+    assert.equal((await request(`/api/forms/${form.id}/yanit`, 'PUT', { answers: { ad: 'Ayşe', tur: 'Robotik', sayi: '42', alan: ['B'] } }, ilCookie)).status, 200, 'yanıt düzeltilebilir');
+    const mine = await (await request('/api/forms/' + form.id, 'GET', null, ilCookie)).json();
+    assert.deepEqual(mine.answers, { ad: 'Ayşe', tur: 'Robotik', alan: ['B'], sayi: 42 });
+    assert.equal((await (await request('/api/meta', 'GET', null, ilCookie)).json()).pendingForms, 0);
+
+    const report = await (await request(`/api/forms/${form.id}/yanitlar`, 'GET', null, cookie)).json();
+    assert.equal(report.responses.length, 1, 'kişi başına tek yanıt');
+    assert.equal(report.responses[0].city, 'İzmir');
+    assert.deepEqual(report.pending, [], 'hedef kitlede bekleyen il yöneticisi kalmadı');
+    assert.equal(report.noAccount.length, 80, 'hesabı olmayan iller ayrıca listelenir');
+    const formList = await (await request('/api/forms', 'GET', null, cookie)).json();
+    assert.deepEqual(formList.map(f => [f.id, f.responses, f.expected]), [[onlyVan.id, 0, 0], [form.id, 1, 1]]);
+
+    const formExcel = await request(`/api/forms/${form.id}/yanitlar?bicim=xlsx`, 'GET', null, cookie);
+    assert.equal(formExcel.status, 200);
+    const sheet = unzip(Buffer.from(await formExcel.arrayBuffer()))['xl/worksheets/sheet1.xml'].toString('utf8');
+    assert.match(sheet, /Koordinatör adı/);
+    assert.match(sheet, /<c r="C2"[^>]*><is><t[^>]*>izmir<\/t>/, 'ad soyad girilmemiş hesap kullanıcı adıyla yazılır');
+    assert.match(sheet, /<c r="H2" s="4"><v>42<\/v>/, 'sayı sorusu Excel sayısı olarak yazılır');
+
+    /* Düzenleme sürüm denetimi ve kapatma */
+    assert.equal((await request('/api/forms/' + form.id, 'PUT', { ...anket, closed: true }, cookie)).status, 400, 'sürüm bilgisi zorunlu');
+    const full = await (await request('/api/forms/' + form.id, 'GET', null, cookie)).json();
+    assert.equal(full.responses, 1);
+    assert.equal((await request('/api/forms/' + form.id, 'PUT', { ...anket, closed: true, updated: full.updated }, cookie)).status, 200);
+    assert.equal((await request('/api/forms/' + form.id, 'PUT', { ...anket, updated: full.updated }, cookie)).status, 409, 'eski sürüm reddedilir');
+    assert.equal((await request(`/api/forms/${form.id}/yanit`, 'PUT', { answers: { ad: 'A', tur: 'Espor' } }, ilCookie)).status, 400, 'kapalı form yanıt almaz');
+
+    /* Yanıt almış soruları koruma */
+    assert.equal((await request(`/api/forms/${form.id}/durum`, 'PUT', { status: 'draft' }, cookie)).status, 400, 'yanıt almış form taslağa alınamaz');
+    let surum = (await (await request('/api/forms/' + form.id, 'GET', null, cookie)).json());
+    assert.deepEqual(surum.answeredQuestions.sort(), ['ad', 'alan', 'sayi', 'tur'], 'yanıt almış sorular düzenleyiciye bildirilir');
+    const tipDegisik = anket.questions.map(q => (q.id === 'sayi' ? { ...q, type: 'short' } : q));
+    assert.equal((await request('/api/forms/' + form.id, 'PUT', { ...anket, questions: tipDegisik, updated: surum.updated }, cookie)).status, 400, 'yanıt almış sorunun türü değişmez');
+    assert.equal((await request('/api/forms/' + form.id, 'PUT', { ...anket, questions: anket.questions.map(q => (q.id === 'gun' ? { ...q, type: 'short' } : q)), updated: surum.updated }, cookie)).status, 200, 'yanıtsız sorunun türü değişebilir');
+    surum = (await (await request('/api/forms/' + form.id, 'GET', null, cookie)).json());
+    // "sayi" silinir, "Robotik" seçeneğinin adı "Robotik ve kodlama" olur
+    const yeniSorular = anket.questions.filter(q => q.id !== 'sayi').map(q => (q.id === 'tur' ? { ...q, options: ['Robotik ve kodlama', 'Espor', 'Yapay Zekâ'] } : q));
+    assert.equal((await request('/api/forms/' + form.id, 'PUT', { ...anket, closed: false, questions: yeniSorular, renames: { tur: { Robotik: 'Robotik ve kodlama', Yok: 'Espor' } }, updated: surum.updated }, cookie)).status, 200);
+    const korunan = await (await request(`/api/forms/${form.id}/yanitlar`, 'GET', null, cookie)).json();
+    const sayiSorusu = korunan.form.questions.find(q => q.id === 'sayi');
+    assert.equal(sayiSorusu.archived, true, 'silinen yanıtlı soru kaldırılmış olarak kalır');
+    assert.equal(korunan.responses[0].answers.sayi, 42, 'kaldırılmış sorunun yanıtı raporda');
+    assert.equal(korunan.responses[0].answers.tur, 'Robotik ve kodlama', 'seçenek adı eski yanıta işlenir');
+    assert.ok(!(await (await request('/api/forms/' + form.id, 'GET', null, ilCookie)).json()).questions.some(q => q.id === 'sayi'), 'kaldırılmış soru doldurma ekranında yok');
+    assert.equal((await request(`/api/forms/${form.id}/yanit`, 'PUT', { answers: { ad: 'Ayşe', tur: 'Espor' } }, ilCookie)).status, 200);
+    assert.equal((await (await request(`/api/forms/${form.id}/yanitlar`, 'GET', null, cookie)).json()).responses[0].answers.sayi, 42, 'düzeltmede kaldırılmış sorunun yanıtı silinmez');
+    const kaldirildiExcel = unzip(Buffer.from(await (await request(`/api/forms/${form.id}/yanitlar?bicim=xlsx`, 'GET', null, cookie)).arrayBuffer()))['xl/worksheets/sheet1.xml'].toString('utf8');
+    assert.match(kaldirildiExcel, /Öğrenci sayısı \(kaldırıldı\)/);
+
+    /* Yanıt silme ve form silme */
+    assert.equal((await request(`/api/forms/${form.id}/yanitlar/${report.responses[0].id}`, 'DELETE', null, cookie)).status, 200);
+    assert.equal((await (await request(`/api/forms/${form.id}/yanitlar`, 'GET', null, cookie)).json()).responses.length, 0);
+    assert.equal((await request('/api/forms/' + form.id, 'DELETE', null, ilCookie)).status, 403);
+    assert.equal((await request('/api/forms/' + form.id, 'DELETE', null, cookie)).status, 200);
+    assert.equal((await request('/api/forms/' + form.id, 'GET', null, cookie)).status, 404, 'silinen form görünmez');
+    assert.equal((await request('/formlar.html')).status, 401, 'form sayfası oturum ister');
+    assert.equal((await request('/formlar.js')).status, 401);
+    const formPage = await (await request('/formlar.html', 'GET', null, ilCookie)).text();
+    assert.doesNotMatch(formPage, /(href|src)="\//, 'form sayfası göreli adres kullanır');
 
     /* Kullanıcı yönetimi: yalnızca merkez yöneticisi */
     assert.equal((await request('/api/users', 'GET', null, ilCookie)).status, 403, 'il yöneticisi hesapları göremez');

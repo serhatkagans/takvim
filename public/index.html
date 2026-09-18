@@ -16,6 +16,7 @@
     <a class="brand" href="./" aria-label="GençTek Etkinlik Takvimi"><span class="brand-mark"><img src="genctek.png" alt=""></span><span>GENÇ<span class="brand-accent">TEK</span> <small>Etkinlik Takvimi</small></span></a>
     <div class="header-right">
       <span id="who" class="who" hidden></span>
+      <a id="forms-button" class="button button-ghost" href="formlar.html" hidden>Formlar <span id="forms-badge" class="count-badge" hidden></span></a>
       <button id="users-button" class="button button-ghost" hidden>Kullanıcılar</button>
       <button id="password-button" class="button button-ghost" hidden>Parolamı değiştir</button>
       <button id="logout-button" class="button button-ghost" hidden>Çıkış yap</button>
@@ -25,6 +26,8 @@
 </header>
 
 <main>
+  <!-- Merkezin hatırlattığı, yanıt bekleyen formlar (app.js → identity). -->
+  <div id="reminder-banner" class="container reminder-banner" role="status" hidden></div>
   <section class="page-hero">
     <div class="container hero-inner">
       <div>

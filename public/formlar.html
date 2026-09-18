@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Formlar · GençTek</title>
+<link rel="icon" href="genctek.png">
+<link rel="stylesheet" href="style.css">
+<script src="formlar.js" defer></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container header-inner">
+    <a class="brand" href="./" aria-label="GençTek Etkinlik Takvimi"><span class="brand-mark"><img src="genctek.png" alt=""></span><span>GENÇ<span class="brand-accent">TEK</span> <small>Formlar</small></span></a>
+    <div class="header-right">
+      <span id="who" class="who" hidden></span>
+      <a class="button button-ghost" href="./">Takvime dön</a>
+      <button id="logout-button" class="button button-ghost">Çıkış yap</button>
+    </div>
+  </div>
+</header>
+
+<main class="fp">
+  <!-- Görünümler adres çubuğundaki # ile seçilir (formlar.js → route):
+       #              form listesi
+       #yeni          yeni form (merkez)
+       #duzenle/12    formu düzenle (merkez)
+       #doldur/12     formu doldur (il) / önizle (merkez)
+       #yanitlar/12   yanıtlar (merkez) -->
+  <section class="page-hero fp-hero">
+    <div class="container">
+      <p class="eyebrow" id="hero-eyebrow">GençTek formları</p>
+      <h1 id="hero-title">Formlar</h1>
+      <p class="hero-lede" id="hero-lede"></p>
+    </div>
+  </section>
+
+  <div class="container fp-body">
+    <p id="page-error" class="error" role="alert"></p>
+
+    <!-- Liste -->
+    <section id="list-view" hidden>
+      <div class="fp-toolbar">
+        <input id="list-search" type="search" placeholder="Form ara…" aria-label="Form ara" maxlength="100">
+        <button id="new-form" class="button button-primary" hidden>+ Yeni form</button>
+      </div>
+      <div id="state-filter" class="view-toggle state-filter" role="group" aria-label="Duruma göre süz" hidden>
+        <button type="button" data-state="all" aria-pressed="true">Tümü <small></small></button>
+        <button type="button" data-state="draft" aria-pressed="false">Taslak <small></small></button>
+        <button type="button" data-state="open" aria-pressed="false">Yayında <small></small></button>
+        <button type="button" data-state="closed" aria-pressed="false">Kapalı <small></small></button>
+      </div>
+      <div id="form-list" class="form-list"></div>
+    </section>
+
+    <!-- Form oluşturma / düzenleme (merkez). Google Formlar düzeni: dar sütun,
+         üstte renk bantlı başlık kartı, altında soru kartları; seçili kart
+         düzenlenir, ötekiler il yöneticisinin göreceği biçimde önizlenir. -->
+    <section id="edit-view" class="gf" hidden>
+      <nav class="gf-tabs" aria-label="Form bölümleri">
+        <button type="button" data-edit-tab="questions" aria-pressed="true">Sorular</button>
+        <button type="button" data-edit-tab="settings" aria-pressed="false">Ayarlar</button>
+        <a id="edit-results" href="#" hidden>Yanıtlar</a>
+      </nav>
+      <div id="edit-status" class="status-strip"></div>
+      <p id="edit-warning" class="fp-note" hidden></p>
+
+      <form id="edit-form" class="fp-stack" novalidate>
+        <!-- Kapak görseli: formun tepesinde, il yöneticisi formu açınca ilk bunu görür. -->
+        <div class="gf-banner" id="edit-banner" data-pane="questions" hidden>
+          <img alt="Formun kapak görseli">
+          <div class="gf-banner-tools">
+            <button type="button" class="button button-secondary" data-image="pick">Değiştir</button>
+            <button type="button" class="button button-secondary" data-image="remove">Kaldır</button>
+          </div>
+        </div>
+        <input type="file" id="image-input" accept="image/jpeg,image/png,image/webp" hidden>
+
+        <div class="fp-card gf-header" data-pane="questions">
+          <!-- Başlık ve açıklama biçimli metin: seçilince altında araç çubuğu açılır. -->
+          <div class="gf-rich">
+            <div id="title-editor" class="gf-title-input rich-editor" contenteditable="true" role="textbox" aria-label="Form başlığı" aria-required="true" data-placeholder="Form başlığı" data-inline></div>
+            <div class="rich-toolbar" role="toolbar" aria-label="Başlık biçimi">
+              <button type="button" data-cmd="bold" aria-pressed="false" title="Kalın (Ctrl+B)"><b>B</b></button>
+              <button type="button" data-cmd="italic" aria-pressed="false" title="İtalik (Ctrl+I)"><i>I</i></button>
+              <button type="button" data-cmd="underline" aria-pressed="false" title="Altı çizili (Ctrl+U)"><u>U</u></button>
+              <span class="rich-divider" aria-hidden="true"></span>
+              <button type="button" data-cmd="removeFormat" title="Biçimi temizle"><s>T</s><span class="visually-hidden">Biçimi temizle</span></button>
+            </div>
+          </div>
+          <div class="gf-rich">
+            <div id="description-editor" class="gf-desc-input rich-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Form açıklaması" data-placeholder="Form açıklaması (isteğe bağlı)"></div>
+            <div class="rich-toolbar" role="toolbar" aria-label="Açıklama biçimi">
+              <button type="button" data-cmd="bold" aria-pressed="false" title="Kalın (Ctrl+B)"><b>B</b></button>
+              <button type="button" data-cmd="italic" aria-pressed="false" title="İtalik (Ctrl+I)"><i>I</i></button>
+              <button type="button" data-cmd="underline" aria-pressed="false" title="Altı çizili (Ctrl+U)"><u>U</u></button>
+              <span class="rich-divider" aria-hidden="true"></span>
+              <button type="button" data-cmd="insertUnorderedList" aria-pressed="false" title="Madde işaretli liste"><span aria-hidden="true">•≡</span><span class="visually-hidden">Madde işaretli liste</span></button>
+              <button type="button" data-cmd="insertOrderedList" aria-pressed="false" title="Numaralı liste"><span aria-hidden="true">1≡</span><span class="visually-hidden">Numaralı liste</span></button>
+              <span class="rich-divider" aria-hidden="true"></span>
+              <button type="button" data-cmd="removeFormat" title="Biçimi temizle"><s>T</s><span class="visually-hidden">Biçimi temizle</span></button>
+            </div>
+          </div>
+          <button type="button" class="text-link gf-image-add" data-image="pick" id="image-add">+ Kapak görseli ekle</button>
+        </div>
+
+        <div class="fp-card gf-settings" data-pane="settings" hidden>
+          <h3>Yanıtlar</h3>
+          <label class="gf-setting">
+            <span>Yanıt almayı durdur <small>Form görünmeye devam eder ama yanıt gönderilemez.</small></span>
+            <input name="closed" type="checkbox" role="switch" class="gf-switch">
+          </label>
+          <label class="gf-setting">
+            <span>Son yanıt tarihi <small>İsteğe bağlı · o günün sonuna kadar yanıt alınır.</small></span>
+            <input name="deadline" type="date" min="2000-01-01" max="2099-12-31" class="gf-date">
+          </label>
+        </div>
+
+        <fieldset class="fp-card gf-settings choice" data-pane="settings" hidden>
+          <legend class="visually-hidden">Kimler dolduracak?</legend>
+          <h3 aria-hidden="true">Kimler dolduracak?</h3>
+          <div class="choice-cards">
+            <label class="choice-card"><input type="radio" name="audience-mode" value="all" checked> <span>Bütün il yöneticileri</span></label>
+            <label class="choice-card"><input type="radio" name="audience-mode" value="some"> <span>Seçtiğim iller</span></label>
+          </div>
+          <label class="gf-setting">
+            <span>Merkez yöneticileri de doldursun <small>Açıksa merkez yöneticileri de formu doldurur; yanıtları özete ve Excel'e “Merkez” olarak girer.</small></span>
+            <input name="centralFills" type="checkbox" role="switch" class="gf-switch">
+          </label>
+          <div id="audience-field" class="choice" hidden>
+            <div class="fp-inline">
+              <input id="audience-search" type="search" placeholder="İl ara…" aria-label="İl ara">
+              <button type="button" class="text-link" data-audience="all">Tümünü seç</button>
+              <button type="button" class="text-link" data-audience="none">Temizle</button>
+              <small id="audience-count"></small>
+            </div>
+            <div class="check-grid check-scroll" id="audience-checks"></div>
+          </div>
+        </fieldset>
+      </form>
+
+      <div id="question-list" class="question-list" data-pane="questions"></div>
+      <div class="fp-add-row" data-pane="questions">
+        <button type="button" id="add-question" class="button button-secondary">+ Soru ekle</button>
+        <button type="button" id="add-section" class="button button-secondary">+ Bölüm ekle</button>
+      </div>
+
+      <div class="fp-actions fp-sticky">
+        <p id="edit-error" class="error" role="alert"></p>
+        <button type="button" id="publish-form" class="button button-primary" hidden>Kaydet ve yayımla</button>
+        <button type="button" id="save-form" class="button button-primary">Formu kaydet</button>
+        <a class="button button-secondary" href="#">Vazgeç</a>
+        <a id="edit-preview" class="button button-secondary" href="#" hidden>Önizle</a>
+        <button type="button" id="delete-form" class="button button-danger" hidden>Formu sil</button>
+      </div>
+    </section>
+
+    <!-- Doldurma / önizleme -->
+    <section id="fill-view" class="gf" hidden>
+      <form id="fill-form" class="fp-stack" novalidate></form>
+    </section>
+
+    <!-- Yanıtlar (merkez) -->
+    <section id="results-view" class="gf" hidden>
+      <nav class="gf-tabs" aria-label="Form bölümleri">
+        <a id="results-edit" href="#">Sorular</a>
+        <a id="results-settings" href="#">Ayarlar</a>
+        <button type="button" aria-pressed="true" aria-current="page">Yanıtlar</button>
+      </nav>
+      <div class="fp-card gf-header gf-results-head">
+        <div>
+          <h2 id="results-count"></h2>
+          <p id="results-lede" class="muted"></p>
+        </div>
+        <a id="results-excel" class="button button-secondary" href="#" download>Excel indir</a>
+      </div>
+      <div class="view-toggle gf-subtabs" role="tablist">
+        <button type="button" data-tab="summary" aria-pressed="true">Özet</button>
+        <button type="button" data-tab="table" aria-pressed="false">Tek tek</button>
+        <button type="button" data-tab="pending" aria-pressed="false">Bekleyenler <span id="pending-count"></span></button>
+      </div>
+      <div id="results-summary" class="fp-stack"></div>
+      <div id="results-table" hidden></div>
+      <div id="results-pending" hidden></div>
+    </section>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="container footer-inner">
+    <span class="brand brand-inverse"><span class="brand-mark"><img src="genctek.png" alt=""></span><span>GENÇ<span class="brand-accent">TEK</span></span></span>
+    <p>Sektörün yeni liderleri · 81 ilde ortak etkinlik programı</p>
+  </div>
+</footer>
+
+</body>
+</html>

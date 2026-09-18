@@ -320,3 +320,318 @@ dialog.wide { width: min(860px, calc(100% - 32px)) }
   .form-row { grid-template-columns: 1fr }
   .detail-list > div { grid-template-columns: 1fr; gap: 2px }
 }
+
+/* --- Formlar sayfası (formlar.html) ------------------------------------
+   Alanlar iletişim pencerelerindeki (dialog) biçimi izler; sayfa kendi
+   kapsamında (.fp) aynı kuralları taşır. */
+.fp-hero { padding: 40px 0 32px }
+.fp-hero h1 { margin-bottom: 10px }
+.fp-body { padding: 28px 0 72px; display: grid; gap: 18px }
+.fp-body > section { display: grid; gap: 16px }
+.fp label { display: grid; gap: 6px; font-family: var(--font-display); font-size: .88rem; font-weight: 650; color: var(--color-text-strong) }
+.fp label small, .fp .muted { font-weight: 400; color: var(--color-text-muted); font-size: .82rem }
+.fp p.muted { margin: 0 }
+.fp input:not([type="checkbox"]):not([type="radio"]), .fp select, .fp textarea { width: 100%; min-height: 44px; border: 1px solid var(--color-border-strong); border-radius: 6px; padding: 9px 12px; background: var(--color-surface) }
+.fp input:focus, .fp select:focus, .fp textarea:focus { border-color: var(--color-brand); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand) 14%, transparent) }
+.fp input:disabled, .fp select:disabled, .fp textarea:disabled { background: var(--color-bg-subtle); color: var(--color-text-strong); cursor: not-allowed }
+.fp textarea { resize: vertical }
+.fp input[type="checkbox"], .fp input[type="radio"] { width: auto; min-height: auto; margin: 0; accent-color: var(--color-brand) }
+.fp label.check { display: flex; font-weight: 650 }
+.fp label.choice-card { display: flex; align-items: center; gap: 8px; border: 1px solid var(--color-border-strong); border-radius: 8px; padding: 10px 12px; font-size: .88rem; line-height: 1.25; cursor: pointer }
+.fp label.choice-card:has(input:checked) { border-color: var(--color-brand); background: var(--color-bg-brand-tint); box-shadow: 0 0 0 1px var(--color-brand) }
+.fp .check-grid label { display: flex; align-items: center; gap: 8px; font-weight: 400; font-size: .85rem; padding: 3px 0 }
+.fp-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 12px; padding: 20px 22px; box-shadow: var(--shadow-sm) }
+.fp-card h3 { font-size: 1.05rem; margin-bottom: 4px }
+.fp-stack { display: grid; gap: 16px }
+.fp-toggle { align-self: end; min-height: 44px; flex-wrap: wrap }
+.fp-toggle small { flex-basis: 100% }
+.fp-inline { display: flex; align-items: center; gap: 8px 14px; flex-wrap: wrap }
+.fp-inline input[type="search"] { max-width: 240px }
+.fp-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap }
+.fp-toolbar > input[type="search"] { max-width: 360px }
+.fp-note { margin: 0; padding: 12px 14px; border: 1px solid var(--color-border-strong); border-left: 4px solid var(--color-warning); border-radius: 8px; background: color-mix(in srgb, var(--color-warning) 6%, var(--color-surface)); font-size: .9rem; color: var(--color-text-strong) }
+.fp-flash { border-left-color: var(--color-success); background: color-mix(in srgb, var(--color-success) 7%, var(--color-surface)) }
+.fp-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap }
+.fp-actions .error { flex-basis: 100% }
+.fp-sticky { position: sticky; bottom: 0; z-index: 5; padding: 14px 0; background: color-mix(in srgb, var(--color-bg) 92%, transparent); border-top: 1px solid var(--color-border); backdrop-filter: blur(4px) }
+.fp-add-row { display: flex; justify-content: center }
+.text-link.is-danger { color: var(--color-danger) }
+.text-link:disabled { opacity: .4; cursor: not-allowed; text-decoration: none }
+.icon-button { display: inline-grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--color-border); border-radius: 6px; background: var(--color-surface); color: var(--color-text-strong); font-weight: 700; cursor: pointer }
+.icon-button:hover:not(:disabled) { border-color: var(--color-brand); color: var(--color-brand) }
+.icon-button:disabled { opacity: .35; cursor: not-allowed }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
+
+/* Liste */
+.form-list { display: grid; gap: 12px }
+.form-card { display: flex; align-items: center; justify-content: space-between; gap: 16px 24px; flex-wrap: wrap; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 12px; padding: 18px 22px; box-shadow: var(--shadow-sm) }
+.form-card:hover { border-color: var(--color-border-strong) }
+.form-thumb { width: 120px; aspect-ratio: 4 / 1; flex: none; border-radius: 6px; object-fit: cover; background: var(--color-bg-subtle) }
+@media (max-width: 720px) { .form-thumb { width: 100%; } }
+.form-card-main { display: grid; gap: 4px; min-width: 0; flex: 1 1 360px }
+.form-card h2 { font-size: 1.2rem; margin: 2px 0 0 }
+.form-card h2 a:hover { color: var(--color-brand) }
+.form-card-meta { margin: 0; font-size: .86rem; color: var(--color-text-muted) }
+.form-card-actions { display: flex; align-items: center; gap: 10px 16px; flex-wrap: wrap }
+.form-badge { justify-self: start; border-radius: 4px; padding: 2px 9px; font-family: var(--font-display); font-size: .74rem; font-weight: 700 }
+.form-badge.is-open { background: var(--color-bg-brand-tint); color: var(--color-brand-active) }
+.form-badge.is-done { background: color-mix(in srgb, var(--color-success) 12%, var(--color-surface)); color: var(--color-success) }
+.form-badge.is-closed { background: var(--color-bg-subtle); color: var(--color-text-muted) }
+.form-progress { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: .84rem }
+.form-progress b { color: var(--color-text-strong) }
+.form-progress progress, .bar { appearance: none; width: 180px; height: 8px; border: 0; border-radius: 9999px; background: var(--color-bg-subtle); overflow: hidden }
+.form-progress progress::-webkit-progress-bar { background: var(--color-bg-subtle) }
+.form-progress progress::-webkit-progress-value { background: var(--color-brand); border-radius: 9999px }
+.form-progress progress::-moz-progress-bar { background: var(--color-brand); border-radius: 9999px }
+
+/* Düzenleyici, doldurma ve yanıtlar — Google Formlar düzeni ---------------
+   Liste dışındaki görünümlerde (body.is-gf) büyük başlık gizlenir; sayfa
+   marka renginin açık tonuna döner, içerik 770 px'lik tek sütunda kartlar
+   olarak dizilir. Başlık kartının üstünde kalın kırmızı bant, seçili soru
+   kartının solunda şerit vardır. */
+body.is-gf main.fp { background: var(--color-bg-brand-tint) }
+body.is-gf .fp-hero { display: none }
+body.is-gf .fp-body { width: min(770px, calc(100% - 32px)); padding-top: 20px }
+.gf { gap: 12px !important }
+body.is-gf .fp-sticky { background: color-mix(in srgb, var(--color-bg-brand-tint) 92%, transparent) }
+
+.gf-tabs { display: flex; justify-content: center; gap: 4px; border-bottom: 1px solid var(--color-border); margin-bottom: 4px }
+.gf-tabs > a, .gf-tabs > button { position: relative; padding: 10px 16px 12px; border: 0; background: none; font-family: var(--font-display); font-weight: 650; font-size: .92rem; color: var(--color-text-muted); cursor: pointer }
+.gf-tabs > a:hover, .gf-tabs > button:hover { color: var(--color-text-strong) }
+.gf-tabs > [aria-pressed="true"] { color: var(--color-brand) }
+.gf-tabs > [aria-pressed="true"]::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: -1px; height: 3px; border-radius: 3px 3px 0 0; background: var(--color-brand) }
+
+.gf .fp-card { border-radius: 8px; padding: 22px 24px; border-color: var(--color-border) }
+
+/* Başlık kartı */
+.gf-header { position: relative; overflow: hidden; display: grid; gap: 8px; padding-top: 30px !important }
+.gf-header::before { content: ""; position: absolute; inset: 0 0 auto; height: 10px; background: var(--color-brand) }
+.gf-form-title { margin: 0; font-size: clamp(1.6rem, 1.3rem + 1.2vw, 2rem); font-weight: 400; letter-spacing: -.01em; line-height: 1.2 }
+.gf-form-desc { font-size: .95rem; color: var(--color-text-strong) }
+.gf-form-desc ul, .gf-form-desc ol, .rich-editor ul, .rich-editor ol { margin: 4px 0; padding-left: 24px }
+.gf-header-foot { margin: 6px -24px 0; padding: 12px 24px 0; border-top: 1px solid var(--color-border); font-size: .88rem; color: var(--color-text-muted) }
+.gf-header-foot p { margin: 0 0 2px }
+.gf-header-foot .required { font-weight: 600 }
+.gf-results-head { display: flex !important; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap }
+.gf-results-head h2 { margin: 0 0 4px; font-size: 1.6rem; font-weight: 700 }
+.gf-subtabs { justify-content: center }
+
+/* Kapak görseli: Google'daki gibi 4:1, kenarları yuvarlak */
+.gf-banner { position: relative; border-radius: 8px; overflow: hidden; background: var(--color-bg-subtle); aspect-ratio: 4 / 1 }
+.gf-banner img { display: block; width: 100%; height: 100%; object-fit: cover }
+.gf-banner-tools { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 8px; opacity: 0; transition: opacity 120ms }
+.gf-banner:hover .gf-banner-tools, .gf-banner:focus-within .gf-banner-tools { opacity: 1 }
+.gf-banner-tools .button { min-height: 34px; padding: 6px 12px; font-size: .84rem; box-shadow: var(--shadow-md) }
+.gf-image-add { justify-self: start; margin-top: 4px; font-size: .84rem }
+@media (hover: none) { .gf-banner-tools { opacity: 1 } }
+
+/* Biçimli metin alanları ve araç çubuğu */
+.gf-rich { display: grid }
+.rich-editor { min-height: 1.6em; padding: 6px 2px; border-bottom: 1px solid var(--color-border); outline: none; overflow-wrap: anywhere; transition: border-color 120ms }
+.rich-editor:hover { border-bottom-color: var(--color-border-strong) }
+.rich-editor:focus { border-bottom: 2px solid var(--color-brand); padding-bottom: 5px; background: var(--color-bg-subtle) }
+.rich-editor:empty::before { content: attr(data-placeholder); color: var(--color-text-muted); pointer-events: none }
+.gf-title-input.rich-editor { font-family: var(--font-display); font-size: clamp(1.6rem, 1.3rem + 1.2vw, 2rem); font-weight: 400; line-height: 1.25; color: var(--color-text-strong) }
+.gf-desc-input.rich-editor { font-size: .95rem; color: var(--color-text-strong) }
+.rich-toolbar { display: flex; align-items: center; gap: 2px; padding: 4px 0 }
+.gf-rich:not(:focus-within) .rich-toolbar { display: none }
+.rich-toolbar button { display: inline-grid; place-items: center; min-width: 32px; height: 30px; padding: 0 6px; border: 0; border-radius: 4px; background: none; font-family: Georgia, serif; font-size: 1rem; color: var(--color-text-strong); cursor: pointer }
+.rich-toolbar button:hover { background: var(--color-bg-subtle) }
+.rich-toolbar button[aria-pressed="true"] { background: var(--color-bg-brand-tint); color: var(--color-brand) }
+.rich-divider { width: 1px; height: 20px; margin: 0 4px; background: var(--color-border) }
+
+/* Ayarlar */
+.gf-settings { display: grid; gap: 4px }
+.gf-settings h3 { margin: 0 0 6px; font-size: 1.05rem }
+.fp label.gf-setting { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid var(--color-border); font-weight: 600 }
+.fp label.gf-setting > span { display: grid; gap: 2px }
+.fp .gf-settings h3 + label.gf-setting { border-top: 0 }
+.fp input.gf-date { width: auto !important; min-width: 170px }
+.fp label.gf-setting.is-inline { padding: 0; border: 0; gap: 10px; font-size: .88rem }
+
+/* Açma kapama anahtarı (Zorunlu, Yanıt almayı durdur) */
+.fp input.gf-switch { appearance: none; position: relative; flex: none; width: 38px; height: 20px; margin: 0; border-radius: 9999px; background: var(--color-border-strong); cursor: pointer; transition: background 150ms }
+.fp input.gf-switch::before { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.3); transition: transform 150ms }
+.fp input.gf-switch:checked { background: var(--color-brand) }
+.fp input.gf-switch:checked::before { transform: translateX(18px) }
+
+/* Soru kartları */
+.question-list { display: grid; gap: 12px }
+.question-card { position: relative; display: grid; gap: 12px }
+.question-card.is-active { box-shadow: var(--shadow-md) }
+.question-card.is-active::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 6px; border-radius: 8px 0 0 8px; background: var(--color-brand) }
+.question-card.is-preview { cursor: pointer; gap: 8px }
+.question-card.is-preview:hover { border-color: var(--color-border-strong) }
+.question-preview-title { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 1rem; color: var(--color-text-strong) }
+.question-head { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 12px; align-items: start }
+.fp .question-head input[data-field] { min-height: 52px; border: 0; border-bottom: 1px solid var(--color-border-strong); border-radius: 4px 4px 0 0; background: var(--color-bg-subtle); font-size: 1rem; font-weight: 600; color: var(--color-text-strong) }
+.fp .question-head input[data-field]:focus { border-bottom: 2px solid var(--color-brand); box-shadow: none }
+.fp .question-head select { min-height: 52px }
+.fp .question-card input.question-help, .fp .option-list input[data-option] { min-height: 36px; padding: 6px 2px; border: 0; border-bottom: 1px solid transparent; border-radius: 0; background: transparent; font-size: .92rem }
+.fp .question-card input.question-help:hover, .fp .option-list input[data-option]:hover { border-bottom-color: var(--color-border) }
+.fp .question-card input.question-help:focus, .fp .option-list input[data-option]:focus { border-bottom: 2px solid var(--color-brand); box-shadow: none }
+.question-preview { margin: 0; padding: 6px 0; border-bottom: 1px dotted var(--color-border-strong); color: var(--color-text-muted); font-size: .9rem; max-width: 50% }
+.option-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px }
+.option-list li { display: grid; grid-template-columns: 22px minmax(0, 1fr) 36px; gap: 8px; align-items: center }
+.option-list.is-preview li { grid-template-columns: 22px minmax(0, 1fr); font-size: .92rem; padding: 3px 0 }
+.option-list .icon-button { border: 0; background: none; opacity: .6 }
+.option-list li:hover .icon-button, .option-list .icon-button:focus-visible { opacity: 1 }
+.option-add button { justify-self: start; padding: 6px 2px; border: 0; border-bottom: 1px solid transparent; background: none; color: var(--color-text-muted); font-size: .92rem; cursor: pointer }
+.option-add button:hover { border-bottom-color: var(--color-border) }
+.option-mark { width: 18px; height: 18px; border: 2px solid var(--color-border-strong); border-radius: 9999px; font-size: .8rem; color: var(--color-text-muted) }
+.option-mark.is-multi { border-radius: 3px }
+.option-mark.is-select { border: 0; width: auto; height: auto; text-align: right }
+.question-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding-top: 12px; border-top: 1px solid var(--color-border) }
+.question-tools { display: flex; align-items: center; gap: 4px 6px }
+.question-foot .icon-button { width: 38px; height: 38px; border: 0; border-radius: 50%; background: none; color: var(--color-text-muted) }
+.question-foot .icon-button:hover:not(:disabled) { background: var(--color-bg-subtle); color: var(--color-text-strong) }
+.icon-button svg { fill: currentColor }
+.question-divider { width: 1px; height: 28px; margin: 0 8px; background: var(--color-border) }
+/* Seçili kartın yanında yüzen "+": altına yeni soru ekler. */
+.question-fab { position: absolute; top: 0; left: calc(100% + 14px); padding: 6px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); box-shadow: var(--shadow-sm) }
+.question-fab .icon-button { width: 38px; height: 38px; border: 0; border-radius: 50%; color: var(--color-text-strong) }
+.question-fab .icon-button:hover { background: var(--color-bg-subtle); color: var(--color-brand) }
+@media (max-width: 900px) { .question-fab { display: none } }
+
+/* Doldurma */
+.fill-question { margin: 0; display: grid; gap: 12px; min-width: 0 }
+.fill-question legend { float: left; width: 100%; padding: 0; font-family: var(--font-display); font-weight: 600; font-size: 1rem; color: var(--color-text-strong) }
+.fill-question.has-error { border-color: var(--color-danger); box-shadow: 0 0 0 1px var(--color-danger) }
+.fill-help { margin: 0; font-size: .86rem; color: var(--color-text-muted); white-space: pre-line }
+.fill-error { margin: 0; color: var(--color-danger); font-size: .86rem; font-weight: 600 }
+.fill-error::before { content: "⚠ " }
+.required { color: var(--color-danger) }
+.fill-options { display: grid; gap: 2px }
+.fp label.fill-option { display: flex; align-items: flex-start; gap: 12px; font-weight: 400; font-size: .95rem; color: var(--color-text-strong); padding: 7px 0; cursor: pointer }
+.fp label.fill-option input { width: 18px; height: 18px; margin-top: 3px }
+.fp .fill-question input:not([type="checkbox"]):not([type="radio"]), .fp .fill-question textarea { max-width: 50%; min-height: 36px; padding: 6px 0; border: 0; border-bottom: 1px solid var(--color-border-strong); border-radius: 0; background: transparent; box-shadow: none }
+.fp .fill-question textarea { max-width: 100%; field-sizing: content; min-height: 2.4em; resize: none }
+.fp .fill-question input:focus, .fp .fill-question textarea:focus { border-bottom: 2px solid var(--color-brand); padding-bottom: 5px }
+.fp .fill-question input[type="date"] { max-width: 220px }
+.fp .fill-question select { max-width: 320px }
+.gf-fill-actions .gf-clear { margin-left: auto }
+@media (max-width: 720px) { .fp .fill-question input:not([type="checkbox"]):not([type="radio"]) { max-width: 100% } }
+
+/* Yanıtlar */
+.summary-card { display: grid; gap: 10px }
+.bar-list { display: grid; gap: 8px }
+.bar-row { display: grid; grid-template-columns: minmax(120px, 280px) minmax(80px, 1fr) 40px 44px; gap: 10px; align-items: center; font-size: .9rem }
+.bar-row b { text-align: right; color: var(--color-text-strong); font-variant-numeric: tabular-nums }
+.bar-row small { color: var(--color-text-muted); font-variant-numeric: tabular-nums }
+.bar { display: block; width: 100%; height: 12px }
+.bar i { display: block; height: 100%; min-width: 2px; background: var(--color-brand); border-radius: 9999px }
+.bar i[data-width="0"] { min-width: 0 }
+.number-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin: 0 }
+.number-stats div { background: var(--color-bg-subtle); border-radius: 8px; padding: 10px 12px }
+.number-stats dt { font-size: .78rem; color: var(--color-text-muted) }
+.number-stats dd { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 1.3rem; color: var(--color-text-strong); font-variant-numeric: tabular-nums }
+.text-answers { list-style: none; margin: 0; padding: 0; display: grid; border: 1px solid var(--color-border); border-radius: 8px; max-height: 480px; overflow-y: auto }
+.text-answers li { padding: 9px 12px; border-bottom: 1px solid var(--color-border); white-space: pre-line; font-size: .92rem }
+.text-answers li:last-child { border-bottom: 0 }
+.text-answers small { display: block; font-size: .76rem; color: var(--color-text-muted); font-weight: 600 }
+.table-scroll { overflow-x: auto; border: 1px solid var(--color-border); border-radius: 10px }
+.results-table { border-collapse: collapse; width: 100%; font-size: .86rem }
+.results-table th, .results-table td { padding: 9px 12px; border-bottom: 1px solid var(--color-border); text-align: left; vertical-align: top; min-width: 120px; max-width: 360px; white-space: pre-line }
+.results-table th { position: sticky; top: 0; background: var(--color-bg-subtle); font-family: var(--font-display); color: var(--color-text-strong); white-space: normal }
+.results-table tbody tr:nth-child(even) { background: color-mix(in srgb, var(--color-bg-subtle) 60%, transparent) }
+.results-table .nowrap { white-space: nowrap }
+.results-table td:last-child, .results-table th:last-child { min-width: 0 }
+.pending-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 4px 16px }
+.pending-list li { padding: 6px 0; border-bottom: 1px solid var(--color-border); font-size: .9rem }
+.pending-list strong { color: var(--color-text-strong); margin-right: 6px }
+
+/* Takvim başlığındaki "Formlar" düğmesinde bekleyen form sayısı. */
+.count-badge { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 9999px; background: #fff; color: var(--color-brand); font-size: .74rem; font-weight: 800 }
+
+@media (max-width: 720px) {
+  .question-head { grid-template-columns: minmax(0, 1fr) }
+  .bar-row { grid-template-columns: 1fr 40px 44px }
+  .bar-row .bar { grid-column: 1 / -1; grid-row: 2 }
+  .form-progress progress { width: 120px }
+}
+.question-preview-note { margin: -6px 0 0; font-size: .8rem; color: var(--color-text-muted) }
+.gf-form-title b, .gf-title-input b { font-weight: 800 }
+
+/* Özet grafikleri: pasta (tek seçim), sütun (çok seçim), yanıt verenler */
+.pie-chart { display: flex; align-items: center; gap: 24px 40px; flex-wrap: wrap }
+.pie-chart svg { width: 200px; height: 200px; flex: none }
+.pie-chart path, .pie-chart circle { stroke: var(--color-surface); stroke-width: 2; stroke-linejoin: round }
+.pie-chart path:hover, .pie-chart circle:hover { opacity: .85 }
+.chart-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; flex: 1 1 240px; font-size: .9rem }
+.chart-legend li { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto 52px; gap: 10px; align-items: center; color: var(--color-text-strong) }
+.chart-legend b { font-variant-numeric: tabular-nums; text-align: right }
+.chart-legend small { color: var(--color-text-muted); font-variant-numeric: tabular-nums; text-align: right }
+.swatch { width: 12px; height: 12px; border-radius: 3px }
+.column-chart { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 12px; align-items: end; padding-top: 4px; border-bottom: 0 }
+.column { display: grid; grid-template-rows: auto 180px auto; gap: 6px; min-width: 0; text-align: center }
+.column b { font-size: .88rem; color: var(--color-text-strong); font-variant-numeric: tabular-nums; display: grid }
+.column b small { font-weight: 400; color: var(--color-text-muted); font-size: .76rem }
+.column-track { display: flex; align-items: flex-end; justify-content: center; border-bottom: 1px solid var(--color-border-strong) }
+.column-track i { display: block; width: min(56px, 100%); min-height: 2px; background: #2a78d6; border-radius: 4px 4px 0 0 }
+.column-track i[data-height="0"] { min-height: 0 }
+.column:hover .column-track i { opacity: .85 }
+.column-label { font-size: .8rem; line-height: 1.25; color: var(--color-text); overflow-wrap: break-word; hyphens: auto; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden }
+.responders li { display: flex; justify-content: space-between; gap: 12px; align-items: baseline }
+.responders li small { display: inline; flex: none }
+@media (max-width: 720px) { .column { grid-template-rows: auto 140px auto } .column-chart { gap: 4px } .column-label { font-size: .72rem } }
+
+/* Bölümler (düzenleyici ve doldurma) */
+.section-card { gap: 8px }
+.section-card.is-active::before { background: var(--color-text-strong) }
+.section-tag { justify-self: start; display: inline-block; padding: 3px 10px; border-radius: 6px 6px 0 0; background: var(--color-brand); color: #fff; font-family: var(--font-display); font-size: .78rem; font-weight: 700; margin: -22px 0 4px -24px; border-radius: 8px 0 8px 0 }
+.fp .section-card input.section-title-input { min-height: 44px; border: 0; border-bottom: 1px solid var(--color-border-strong); border-radius: 0; background: transparent; font-size: 1.3rem; font-weight: 600; color: var(--color-text-strong) }
+.fp .section-card input.section-title-input:focus { border-bottom: 2px solid var(--color-brand); box-shadow: none }
+.fill-section { display: grid; gap: 6px }
+.fill-section h2 { margin: 0; font-size: 1.3rem; font-weight: 600 }
+.fill-page { display: grid; gap: 12px }
+.question-fab { display: grid; gap: 2px }
+.fp-add-row { gap: 10px }
+
+/* Sayfa ilerlemesi */
+.page-progress { display: inline-flex; align-items: center; gap: 8px; font-size: .84rem; color: var(--color-text-muted) }
+.page-bar { width: 120px; height: 6px; border-radius: 9999px; background: var(--color-border); overflow: hidden }
+.page-bar i { display: block; height: 100%; background: var(--color-brand); border-radius: 9999px }
+.fill-end { margin-left: auto; display: inline-flex; align-items: center; gap: 14px; flex-wrap: wrap }
+.draft-status { color: var(--color-text-muted); font-size: .8rem }
+.gf-fill-actions .gf-clear { margin-left: 0 }
+
+/* Dosya sorusu */
+.file-field { display: grid; gap: 8px; justify-items: start }
+.file-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; width: 100% }
+.file-list:empty { display: none }
+.file-list li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--color-border); border-radius: 8px; font-size: .9rem }
+.file-list li svg { fill: var(--color-text-muted); flex: none }
+.file-list a { color: var(--color-text-strong); font-weight: 600; overflow-wrap: anywhere; flex: 1 }
+.file-list a:hover { color: var(--color-brand); text-decoration: underline }
+.file-list small { color: var(--color-text-muted); flex: none }
+.file-list .icon-button { border: 0; width: 30px; height: 30px; flex: none }
+.fp label.file-pick { display: inline-flex; flex-direction: row; align-items: center; gap: 8px; cursor: pointer }
+.file-pick svg { fill: currentColor }
+.file-link { color: var(--color-brand); font-weight: 600; text-decoration: underline; text-underline-offset: 3px }
+
+/* Hatırlatma */
+.remind-bar { margin: 8px 0 12px }
+.pending-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px }
+.pending-list .reminded { display: block; font-size: .76rem }
+.form-badges { display: flex; gap: 6px; flex-wrap: wrap }
+.form-badge.is-reminded { background: color-mix(in srgb, var(--color-warning) 14%, var(--color-surface)); color: var(--color-warning) }
+.reminder-banner { margin-top: 16px; padding: 12px 16px; border: 1px solid color-mix(in srgb, var(--color-warning) 45%, var(--color-surface)); border-left: 5px solid var(--color-warning); border-radius: 8px; background: color-mix(in srgb, var(--color-warning) 8%, var(--color-surface)); color: var(--color-text-strong); font-size: .92rem }
+.reminder-banner ul { margin: 6px 0 0; padding-left: 20px }
+.reminder-banner a { color: var(--color-brand); font-weight: 700; text-decoration: underline; text-underline-offset: 3px }
+.form-list .reminder-banner { margin-top: 0 }
+
+/* Durum: taslak / yayında / kapalı */
+.form-badge.is-draft { background: var(--color-bg-subtle); color: var(--color-text-strong); border: 1px dashed var(--color-border-strong) }
+.status-strip { display: flex; align-items: center; gap: 10px 12px; flex-wrap: wrap; padding: 10px 14px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); font-size: .88rem; color: var(--color-text-strong) }
+.status-strip.is-draft { border-style: dashed; border-color: var(--color-border-strong) }
+.status-strip .text-link { margin-left: auto }
+.state-filter { margin-top: 12px; flex-wrap: wrap }
+.state-filter small { font-weight: 400; opacity: .75; margin-left: 2px }
+
+/* Soru koruma */
+.question-lock { margin: -4px 0 0; font-size: .8rem; color: var(--color-text-muted) }
+.fp .question-head select:disabled { opacity: .7; cursor: not-allowed }
+.question-card.is-archived { gap: 4px; border-style: dashed; background: color-mix(in srgb, var(--color-bg-subtle) 70%, var(--color-surface)); box-shadow: none }
+.question-card.is-archived .question-preview-title { color: var(--color-text-muted); text-decoration: line-through }
+.question-card.is-archived .text-link { justify-self: start }
+.summary-card.is-archived { border-style: dashed }

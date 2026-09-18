@@ -62,6 +62,15 @@ async function identity() {
   /* Kullanıcı yönetimi yalnızca merkez yöneticisinde: il koordinatörü başka
      hesapları göremez, sunucu da bu uçları ona kapatır. */
   $('#users-button').hidden = !user?.central;
+  /* Formlar: merkez hazırlar, il yöneticisi doldurur; rozet yanıt bekleyen açık form sayısı. */
+  $('#forms-button').hidden = !user;
+  $('#forms-badge').hidden = !meta.pendingForms;
+  $('#forms-badge').textContent = meta.pendingForms || '';
+  $('#forms-button').title = meta.pendingForms ? meta.pendingForms + ' form yanıtınızı bekliyor' : '';
+  /* Merkez hatırlattıysa takvimin üstünde bant: kişi formu gönderene kadar kalır. */
+  const reminders = meta.reminders || [];
+  $('#reminder-banner').hidden = !reminders.length;
+  $('#reminder-banner').innerHTML = reminders.length ? `<strong>Merkez hatırlatma gönderdi: yanıtınızı bekleyen ${reminders.length === 1 ? 'form' : reminders.length + ' form'} var</strong><ul>${reminders.map(f => `<li><a href="formlar.html#doldur/${f.id}">${escapeHtml(f.title)}</a>${f.deadline ? ` · son gün ${escapeHtml(f.deadline.split('-').reverse().join('.'))}` : ''}</li>`).join('')}</ul>` : '';
   /* "Kendi girdiğim etkinlikler" yalnızca il yöneticisinde anlamlıdır. */
   $('#mine-label').hidden = !user || !!user.central;
   if ($('#mine-label').hidden) $('#mine').checked = false;
@@ -729,7 +738,7 @@ async function usersAction(target) {
     } else if (target.dataset.role === 'remove') {
       if (!confirm(`${name} hesabı kaldırılsın mı? Bu hesapla açılmış etkinlikler takvimde kalır.`)) return;
       const outcome = await api('api/users/' + id, { method: 'DELETE' });
-      $('#users-error').textContent = outcome.disabled ? `${name} devre dışı bırakıldı; ${outcome.events} etkinlik kaydı bağlı olduğu için hesap satırı arşivde tutuldu.` : `${name} silindi.`;
+      $('#users-error').textContent = outcome.disabled ? `${name} devre dışı bırakıldı; ${[outcome.events && `${outcome.events} etkinlik kaydı`, outcome.responses && `${outcome.responses} form yanıtı`].filter(Boolean).join(' ve ')} bağlı olduğu için hesap satırı arşivde tutuldu.` : `${name} silindi.`;
     } else if (target.dataset.role === 'city') {
       await api('api/users/' + id, { method: 'PUT', body: JSON.stringify({ city: target.value }) });
       $('#users-error').textContent = `${name} için yetki alanı güncellendi; açık oturumları kapatıldı.`;
