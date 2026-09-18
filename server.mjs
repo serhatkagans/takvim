@@ -162,6 +162,14 @@ function tooManyAttempts(keys) {
 const canManage = (user, event) => !user.city
   || (listOf(event.cities).length ? listOf(event.cities).includes(user.city) : event.owner === user.id);
 
+/** Serbest metin araması: ad, yer, açıklama, il, grup, tür, amaç ve paydaşlarda.
+    LIKE jokerleri (% _) kaçırılır; PostgreSQL'de LIKE, ILIKE'a çevrilir. */
+const SEARCH_FIELDS = ['title', 'location', 'description', 'city', 'theme', 'subtypes', 'purpose', 'partners'];
+function searchSql(query) {
+  const pattern = '%' + query.replace(/[\\%_]/g, c => '\\' + c) + '%';
+  return { clause: `(${SEARCH_FIELDS.map(field => `${field} LIKE ? ESCAPE '\\'`).join(' OR ')})`, params: SEARCH_FIELDS.map(() => pattern) };
+}
+
 const liveEvents = (where, params) => db.all(`SELECT ${FIELDS} FROM events WHERE deleted_at IS NULL AND ${where} ORDER BY start`, params);
 
 const server = createServer(async (req, res) => {
@@ -207,8 +215,10 @@ const server = createServer(async (req, res) => {
 
     /* ---- Faaliyet raporu (Word / Excel) — yalnızca yöneticiler ----------
        Dönem `bas`–`bit` (iki gün dahil) ya da tek ay (`ay=2026-09`).
-       Kenar çubuğundaki süzgeçler (il / çalışma grubu / tür) aynen uygulanır;
-       döneme değen her etkinlik girer (sınırı aşan çok günlükler dahil). */
+       Süzgeçler (il / çalışma grubu / tür) ve `ara` metni (etkinlik adı,
+       açıklama, paydaş…) uygulanır; döneme değen her etkinlik girer (sınırı
+       aşan çok günlükler dahil). `idler` verilirse (pencerede aramayla
+       eşleşip işaretli bırakılanlar) arama yerine yalnızca o kayıtlar girer. */
     if (url.pathname === '/api/rapor' && req.method === 'GET') {
       if (!user) return send(res, 401, { error: 'Faaliyet raporunu indirmek için giriş yapın.' });
       const month = url.searchParams.get('ay') || '';
@@ -224,8 +234,16 @@ const server = createServer(async (req, res) => {
       if (!['docx', 'xlsx', 'zip'].includes(format)) return send(res, 400, { error: 'Geçersiz dosya biçimi.' });
       const filters = { city: url.searchParams.get('il') || '', theme: url.searchParams.get('tema') || '', category: url.searchParams.get('tur') || '', subtype: url.searchParams.get('alt') || '', status: url.searchParams.get('durum') || '' };
       if (!validFilters(filters)) return send(res, 400, { error: 'Geçersiz süzgeç.' });
+      filters.search = (url.searchParams.get('ara') || '').trim();
+      if (filters.search.length === 1 || filters.search.length > 100) return send(res, 400, { error: 'Arama için 2–100 karakter yazın.' });
       const next = dayString(new Date(Date.parse(to + 'T00:00:00Z') + 86400000));
       const { clauses, params } = filterSql(filters);
+      const ids = url.searchParams.get('idler');
+      if (ids !== null) {
+        if (!/^\d{1,9}(,\d{1,9}){0,499}$/.test(ids)) return send(res, 400, { error: 'Geçersiz etkinlik seçimi.' });
+        const list = ids.split(',').map(Number);
+        clauses.push(`id IN (${list.map(() => '?').join(',')})`); params.push(...list);
+      } else if (filters.search) { const search = searchSql(filters.search); clauses.push(search.clause); params.push(...search.params); }
       const rows = await liveEvents(['start<?', '"end">?', ...clauses].join(' AND '), [next + 'T00:00', from + 'T00:00', ...params]);
       if (format === 'zip') {
         const entries = await photoArchive(rows);
@@ -315,8 +333,8 @@ const server = createServer(async (req, res) => {
       const query = (url.searchParams.get('q') || '').trim();
       if (query) {
         if (query.length < 2 || query.length > 100) return send(res, 400, { error: 'Arama için 2–100 karakter yazın.' });
-        const pattern = '%' + query.replace(/[\\%_]/g, c => '\\' + c) + '%';
-        const rows = await db.all(`SELECT ${FIELDS} FROM events WHERE deleted_at IS NULL AND (title LIKE ? ESCAPE '\\' OR location LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\' OR city LIKE ? ESCAPE '\\' OR theme LIKE ? ESCAPE '\\' OR subtypes LIKE ? ESCAPE '\\' OR purpose LIKE ? ESCAPE '\\' OR partners LIKE ? ESCAPE '\\') ORDER BY start DESC LIMIT ?`, [pattern, pattern, pattern, pattern, pattern, pattern, pattern, pattern, SEARCH_LIMIT]);
+        const search = searchSql(query);
+        const rows = await db.all(`SELECT ${FIELDS} FROM events WHERE deleted_at IS NULL AND ${search.clause} ORDER BY start DESC LIMIT ?`, [...search.params, SEARCH_LIMIT]);
         return send(res, 200, rows);
       }
       const from = url.searchParams.get('from'), to = url.searchParams.get('to');

@@ -45,6 +45,7 @@
         <button type="button" class="stat" data-stat="done" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-done">—</strong><span>Tamamlanan etkinlik ▾</span></button>
         <button type="button" class="stat" data-stat="upcoming" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-upcoming">—</strong><span>Planlanan / devam eden ▾</span></button>
         <button type="button" class="stat" data-stat="cities" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-cities">—</strong><span>İl dağılımı ▾</span></button>
+        <button type="button" class="stat" data-stat="participants" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-participants">—</strong><span>Katılan il ▾</span></button>
         <button type="button" class="stat" data-stat="themes" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-themes">—</strong><span>Çalışma grubu ▾</span></button>
         <button type="button" class="stat" data-stat="students" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-students">—</strong><span>Öğrenci ▾</span></button>
         <button type="button" class="stat" data-stat="teachers" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-teachers">—</strong><span>Öğretmen ▾</span></button>
@@ -202,12 +203,18 @@
 <dialog id="report-dialog">
   <form id="report-form">
     <div class="dialog-top"><h2>Faaliyet raporu</h2><button type="button" class="close" data-close aria-label="Kapat">×</button></div>
-    <p>Seçtiğiniz dönemdeki etkinlikler, seçtiğiniz kapsam / ile göre indirilir.</p>
+    <p>Seçtiğiniz dönemdeki etkinlikler, seçtiğiniz kapsam / ile ve yazdığınız aramaya göre indirilir.</p>
     <div class="form-row">
       <label>Başlangıç tarihi<input name="from" type="date" min="2000-01-01" max="2099-12-31" required></label>
       <label>Bitiş tarihi<input name="to" type="date" min="2000-01-01" max="2099-12-31" required></label>
     </div>
     <label>Kapsam / il<select name="city"></select></label>
+    <label>Etkinlik ara <small>isteğe bağlı · ad, açıklama, paydaş…</small><input name="search" type="search" maxlength="100" placeholder="Örn. Tek Maraton"></label>
+    <!-- Aramayla eşleşenler: rapora yalnızca işaretli olanlar girer. -->
+    <fieldset class="choice" id="report-matches-field" hidden>
+      <legend>Rapora girecek etkinlikler <small id="report-matches-count"></small></legend>
+      <div class="check-grid check-scroll report-matches" id="report-matches"></div>
+    </fieldset>
     <fieldset class="choice">
       <legend>Dosya biçimi</legend>
       <div class="choice-cards">
@@ -235,7 +242,8 @@
       <div class="choice-cards" id="scope-cards"></div>
     </fieldset>
     <!-- Kaydı girenin ili zaten düzenleyendir; aşağıdakiler yalnızca gerekirse açılır. -->
-    <div class="city-pickers">
+    <fieldset class="choice city-pickers">
+      <legend>Düzenleyen / Katılan iller <small>kendi iliniz zaten düzenleyendir; varsa diğer illeri işaretleyin</small></legend>
       <div class="choice-cards city-toggles">
         <label class="choice-card"><input type="checkbox" id="cities-toggle" data-picker="cities"> <span>Ortak düzenleyen iller</span></label>
         <label class="choice-card"><input type="checkbox" id="participants-toggle" data-picker="participants"> <span>Katılan iller</span></label>
@@ -250,7 +258,7 @@
         <input id="participants-search" type="search" data-search="participant-checks" placeholder="İl ara…" aria-label="Katılan illerde ara">
         <div class="check-grid check-scroll" id="participant-checks"></div>
       </fieldset>
-    </div>
+    </fieldset>
     <fieldset class="choice" id="groups-field">
       <legend>İlgili olduğu çalışma grubu varsa işaretleyin <small>birden fazla seçilebilir</small></legend>
       <div class="check-grid" id="group-checks"></div>

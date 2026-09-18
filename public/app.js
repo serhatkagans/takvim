@@ -93,6 +93,11 @@ async function reload() {
   }
 }
 
+/** Serbest aramanın baktığı metin: ad, yer, amaç, açıklama, il, tür, grup ve paydaşlar. */
+const searchText = e => `${e.title} ${e.location} ${e.purpose} ${e.description} ${e.city} ${e.category} ${e.subtypes} ${e.work_groups} ${partnersOf(e).map(partnerLabel).join(' ')}`.toLocaleLowerCase('tr-TR');
+/** Kapsam seçiliyse o kapsamdaki, il seçiliyse o ilin düzenlediği ya da katıldığı etkinlik. */
+const inPlace = (e, place) => !place || (meta.scopes.includes(place) ? e.scope === place : [...listOf(e.cities), ...listOf(e.participants)].includes(place));
+
 /** Kayıtların kapsam / il seçimine ve arama metnine göre süzülmesi.
     Birden çok ile bağlı etkinlik her ilinde (düzenleyen ya da katılan) görünür. */
 function filtered(source = events) {
@@ -102,8 +107,7 @@ function filtered(source = events) {
   const mine = $('#mine').checked && meta.user ? meta.user.id : null;
   return source.filter(e =>
     (!mine || e.owner === mine) &&
-    (!place || (meta.scopes.includes(place) ? e.scope === place : [...listOf(e.cities), ...listOf(e.participants)].includes(place))) &&
-    (`${e.title} ${e.location} ${e.purpose} ${e.description} ${e.city} ${e.category} ${e.subtypes} ${e.work_groups} ${partnersOf(e).map(partnerLabel).join(' ')}`.toLocaleLowerCase('tr-TR').includes(query)));
+    inPlace(e, place) && searchText(e).includes(query));
 }
 
 /** Sayaçların "tüm etkinlikler" kümesi. Ay değişince yeniden yüklenmez;
@@ -239,7 +243,13 @@ const ownerCity = e => e.owner_city || 'YEĞİTEK';
 const ownerLabel = e => [ownerCity(e), fullName({ first_name: e.owner_first, last_name: e.owner_last })].filter(Boolean).join(' / ');
 
 /* `note`: başlığın yanında vurgulanan kısa bilgi (ör. katılımcı sayısı). */
-const resultItem = (e, note) => `<button class="agenda-item ${statusClass(e.status)}" data-event="${e.id}"><span class="agenda-date">${escapeHtml(e.start.slice(8, 10) + '.' + e.start.slice(5, 7))}<small>${escapeHtml(e.start.slice(0, 4))}</small></span><span class="agenda-body"><strong>${escapeHtml(e.title)}${typeof note === 'string' ? ` <em class="agenda-note">${escapeHtml(note)}</em>` : ''}</strong><small>${escapeHtml([e.city, subtypeLabel(e), locationLabel(e)].join(' · '))}</small><small>${escapeHtml(e.status)} · Giren: ${escapeHtml(ownerLabel(e))}</small></span></button>`;
+/** Liste satırı: tarih, ad ve iki bilgi satırı. `participants` verilirse
+    düzenleyen il ve giren yerine yalnızca katılan iller yazılır. */
+const resultItem = (e, note, participants = false) => `<button class="agenda-item ${statusClass(e.status)}" data-event="${e.id}"><span class="agenda-date">${escapeHtml(e.start.slice(8, 10) + '.' + e.start.slice(5, 7))}<small>${escapeHtml(e.start.slice(0, 4))}</small></span><span class="agenda-body"><strong>${escapeHtml(e.title)}${typeof note === 'string' ? ` <em class="agenda-note">${escapeHtml(note)}</em>` : ''}</strong>`
+  + (participants
+    ? `<small>Katılan iller: ${escapeHtml(listOf(e.participants).join(', '))}</small><small>${escapeHtml([subtypeLabel(e), e.status].join(' · '))}</small>`
+    : `<small>${escapeHtml([e.city, subtypeLabel(e), locationLabel(e)].join(' · '))}</small><small>${escapeHtml(e.status)} · Giren: ${escapeHtml(ownerLabel(e))}</small>`)
+  + '</span></button>';
 
 /** Üstteki sayaç kutularından biri açıksa, o sayının hangi il / çalışma grubu /
     etkinlik türünden oluştuğunu adetleriyle listeler. Bir değere tıklamak
@@ -272,6 +282,8 @@ const statFilters = {
   upcoming: { subset: e => e.status === 'Planlandı' || e.status === 'Ertelendi', values: e => listOf(e.subtypes), all: eventTypes },
   /* Etkinlik düzenleyen her ilde sayılır (kaydı giren + ortak düzenleyenler); katılan iller sayılmaz. */
   cities: { values: organizersOf, distinct: true, showAll: true, first: ownerCity({}) },
+  /* Etkinliğe katılan iller (düzenleyenler hariç); her il katıldığı etkinlik sayısıyla. */
+  participants: { values: e => listOf(e.participants), distinct: true, showAll: true },
   themes: { values: groupsOf, all: () => meta.groups, distinct: true, showAll: true },
   /* `byEvent`: il yerine her etkinliğin kendi katılımcı sayısı; tıklamak etkinliği açar. */
   students: { weight: e => e.students || 0, byEvent: true },
@@ -324,19 +336,22 @@ function renderBreakdown() {
   const list = periodEvents().filter(subset);
   const active = pickedPills.get(openStat) || '';
   if (byPartner) {
-    const entries = list.flatMap(partnersOf), names = spellings(entries.map(partnerName)), people = spellings(entries.map(p => p.person).filter(Boolean));
-    const partners = new Map();
+    /* Kurum / Kişi ovali seçiliyse liste yalnızca kurumlara ya da kişilere göre
+       gruplanır; seçili değilse kurum, kurumu olmayanlar kişi adıyla. */
+    const entries = list.flatMap(partnersOf), orgNames = spellings(entries.map(p => p.org).filter(Boolean)), people = spellings(entries.map(p => p.person).filter(Boolean));
+    const [nameOf, noteOf, notes] = active === 'Kurum' ? [p => p.org, p => p.person, people]
+      : active === 'Kişi' ? [p => p.person, p => p.org, orgNames]
+      : [partnerName, p => (p.org ? p.person : ''), people];
+    const names = spellings(entries.map(nameOf).filter(Boolean)), partners = new Map();
     for (const e of list) for (const p of partnersOf(e)) {
-      const key = nameKey(partnerName(p)), entry = partners.get(key) || { events: new Set(), people: new Set() };
+      if (!nameOf(p)) continue;
+      const key = nameKey(nameOf(p)), entry = partners.get(key) || { events: new Set(), notes: new Set() };
       entry.events.add(e);
-      if (p.org && p.person) entry.people.add(people.get(nameKey(p.person)));
+      if (noteOf(p)) entry.notes.add(notes.get(nameKey(noteOf(p))));
       partners.set(key, entry);
     }
-    /* Özet ovaller: farklı kurum ve farklı kişi sayısı (kurumsuz kişiler de sayılır). */
-    const orgs = new Set(entries.map(p => p.org).filter(Boolean).map(nameKey));
-    box.innerHTML = `<div class="stat-pills"><span class="stat-pill is-static">Kurum <b>${orgs.size.toLocaleString('tr-TR')}</b></span>`
-      + `<span class="stat-pill is-static">Kişi <b>${people.size.toLocaleString('tr-TR')}</b></span></div>`
-      + groupedEvents([...partners].map(([key, { events: joined, people: named }]) => [names.get(key), joined, [...named].join(', ')]), 'Gösterilecek paydaş yok.');
+    box.innerHTML = `<div class="stat-pills">${pillButton('Kurum', orgNames.size, active)}${pillButton('Kişi', people.size, active)}</div>`
+      + groupedEvents([...partners].map(([key, { events: joined, notes: noted }]) => [names.get(key), joined, [...noted].join(', ')]), 'Gösterilecek paydaş yok.');
     return;
   }
   if (byEvent) {
@@ -355,7 +370,7 @@ function renderBreakdown() {
   const hidden = active && !showAll && !expandedLists.has(openStat) && rows.findIndex(([value]) => value === active) >= MAX_STAT_EVENTS;
   const pills = limited(openStat, hidden ? [...rows.filter(([value]) => value === active), ...rows.filter(([value]) => value !== active)] : rows,
     ([value, count]) => pillButton(value, count, active), showAll);
-  const events = limited(`${openStat}:${active}`, chosen, e => resultItem(e), openStat === 'done');
+  const events = limited(`${openStat}:${active}`, chosen, e => resultItem(e, null, openStat === 'participants'), openStat === 'done');
   box.innerHTML = (rows.length ? `<div class="stat-pills">${pills.html}</div>${pills.more}` : '<p>Gösterilecek etkinlik yok.</p>')
     + (active
       ? `<div class="stat-events"><p>${escapeHtml(active)} · ${chosen.length} etkinlik</p>`
@@ -833,17 +848,61 @@ $('#report').onclick = () => {
   /* İl listesi soldaki süzgeçle aynıdır; açılışta oradaki seçimle gelir. */
   form.elements.city.innerHTML = $('#city-pick').innerHTML;
   form.elements.city.value = $('#city-pick').value;
+  /* Arama kutusu yan paneldeki aramayla gelir. */
+  form.elements.search.value = $('#search').value.trim();
+  reportSkipped.clear();
+  renderReportMatches();
   form.querySelector('.error').textContent = '';
   $('#report-dialog').showModal();
 };
 
+/* Aramayla eşleşen ama işareti kaldırılan kayıtlar; arama değişse de hatırlanır. */
+const reportSkipped = new Set();
+
+/** Arama yazılıysa dönemde, seçili il / kapsamda ve aramayla eşleşen etkinlikler
+    işaretli liste olarak çıkar; aynı adlı kayıtlar tarih ve iliyle ayırt edilir. */
+function reportMatches() {
+  const form = $('#report-form'), { from, to, city } = form.elements, query = form.elements.search.value.trim().toLocaleLowerCase('tr-TR');
+  if (query.length < 2 || !from.value || !to.value) return null;
+  const next = shiftDay(to.value, 1) + 'T00:00';
+  return allEvents.filter(e => e.start < next && e.end > from.value + 'T00:00' && inPlace(e, city.value) && searchText(e).includes(query))
+    .sort((a, b) => b.start.localeCompare(a.start));
+}
+
+function renderReportMatches() {
+  const matches = reportMatches();
+  $('#report-matches-field').hidden = !matches;
+  if (!matches) return;
+  const date = e => `${e.start.slice(8, 10)}.${e.start.slice(5, 7)}.${e.start.slice(0, 4)}`;
+  $('#report-matches').innerHTML = matches.length
+    ? matches.map(e => `<label><input type="checkbox" name="ids" value="${e.id}"${reportSkipped.has(e.id) ? '' : ' checked'}> <span><b>${escapeHtml(e.title)}</b> <small>${escapeHtml(date(e))} · ${escapeHtml(e.city)} · ${escapeHtml(e.status)}</small></span></label>`).join('')
+    : '<p class="empty">Bu dönemde aramayla eşleşen etkinlik yok.</p>';
+  $('#report-matches-count').textContent = `(${matches.filter(e => !reportSkipped.has(e.id)).length} / ${matches.length} işaretli)`;
+}
+
+$('#report-form').addEventListener('input', event => { if (['from', 'to', 'city', 'search'].includes(event.target.name)) renderReportMatches(); });
+$('#report-form').addEventListener('change', event => {
+  if (event.target.name === 'ids') {
+    if (event.target.checked) reportSkipped.delete(Number(event.target.value)); else reportSkipped.add(Number(event.target.value));
+    renderReportMatches();
+  } else if (['from', 'to', 'city'].includes(event.target.name)) renderReportMatches();
+});
+
 /** Bağlantı yerine fetch: oturum düşmüşse tarayıcı hata JSON'unu rapor
     dosyası diye kaydetmesin, mesaj pencerede görünsün. */
 $('#report-form').onsubmit = submitHandler(async form => {
-  const { from, to, format, city } = Object.fromEntries(new FormData(form));
+  const { from, to, format, city, search } = Object.fromEntries(new FormData(form));
+  if (search.trim().length === 1) throw Error('Arama için en az 2 karakter yazın.');
   if (to < from) throw Error('Bitiş tarihi başlangıç tarihinden önce olamaz.');
   const params = new URLSearchParams({ bas: from, bit: to, bicim: format });
   if (city) params.set('il', city);
+  const matches = reportMatches();
+  if (matches) {
+    const ids = matches.filter(e => !reportSkipped.has(e.id)).map(e => e.id);
+    if (!ids.length) throw Error('Rapora girecek en az bir etkinlik işaretleyin.');
+    params.set('ara', search.trim());
+    params.set('idler', ids.join(','));
+  }
   const response = await fetch('api/rapor?' + params);
   if (!response.ok) {
     const message = (await response.json().catch(() => ({}))).error || 'Rapor oluşturulamadı.';

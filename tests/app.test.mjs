@@ -406,6 +406,16 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
     const sheetXml = sheetParts['xl/worksheets/sheet1.xml'].toString('utf8');
     for (const text of ['Etkinlik türü', 'Tamamlandı mı', 'Hayır', 'İlişkili olduğu temel etkinlik', 'Çalışma grupları', 'Yapay zekâ tanışma toplantısı', 'Diğer', 'Yapay Zekâ', 'Ortak robotik atölyesi', 'Ayşe Yılmaz – Bilim Merkezi'])
       assert.ok(sheetXml.includes(text), text + ' Excel\'de');
+    /* Arama metni rapora da uygulanır: adında "robotik" geçen tek kayıt gelir. */
+    const aranan = unzip(Buffer.from(await (await request('/api/rapor?bas=2026-09-01&bit=2026-10-31&bicim=xlsx&ara=robotik', 'GET', null, cookie)).arrayBuffer()));
+    const arananXml = aranan['xl/worksheets/sheet1.xml'].toString('utf8');
+    assert.ok(arananXml.includes('Ortak robotik atölyesi') && !arananXml.includes('Yapay zekâ tanışma toplantısı'), 'arama raporu süzer');
+    assert.equal((await request('/api/rapor?bas=2026-09-01&bit=2026-10-31&ara=r', 'GET', null, cookie)).status, 400, 'tek harfle arama');
+    /* Pencerede işaretli bırakılan kayıtlar: arama yerine yalnızca bu kimlikler girer. */
+    const secilen = unzip(Buffer.from(await (await request(`/api/rapor?bas=2026-09-01&bit=2026-10-31&bicim=xlsx&ara=robotik&idler=${id}`, 'GET', null, cookie)).arrayBuffer()));
+    const secilenXml = secilen['xl/worksheets/sheet1.xml'].toString('utf8');
+    assert.ok(secilenXml.includes('Yapay zekâ tanışma toplantısı') && !secilenXml.includes('Ortak robotik atölyesi'), 'yalnızca seçilen kayıt');
+    assert.equal((await request('/api/rapor?bas=2026-09-01&bit=2026-10-31&idler=1;2', 'GET', null, cookie)).status, 400, 'geçersiz kimlik listesi');
     const foto = await request('/api/rapor?bas=2026-09-01&bit=2026-10-31&bicim=zip', 'GET', null, cookie);
     assert.equal(foto.status, 200);
     assert.equal(foto.headers.get('content-type'), 'application/zip');

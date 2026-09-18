@@ -76,7 +76,10 @@ p { margin-top: 0 }
 .page-hero { background: var(--color-bg-subtle); border-bottom: 1px solid var(--color-border); padding: 56px 0 48px }
 .hero-inner { display: grid; grid-template-columns: 1fr; gap: 28px; align-items: center }
 .hero-lede { font-size: 1.12rem; margin: 0 }
-.hero-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px }
+/* Sekiz kart: genişte tek sıra ve satırı sağ kenara kadar doldurur; daraldıkça
+   4'lü, telefonda 2'li sıra (aşağıdaki @media kuralları). Sayı açıkça verilir:
+   auto-fill/auto-fit, tüm satırı kaplayan başlık yüzünden boş sütun bırakıyordu. */
+.hero-stats { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 10px }
 /* Başlık solda, onay kutusu ile "Filtreleri temizle" sağda yan yana durur:
    boşluğu başlık emer, yoksa üç öğede ortadaki ortaya kayar. */
 .stats-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap }
@@ -85,7 +88,7 @@ p { margin-top: 0 }
 .stats-toggle { margin: 0; cursor: pointer }
 #stat-clear:disabled { opacity: .45; cursor: default }
 #stat-clear:disabled:hover { text-decoration: none }
-.hero-stats .stat { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 12px; padding: 16px; display: grid; text-align: left; box-shadow: var(--shadow-sm); cursor: pointer; transition: border-color 120ms, transform 120ms }
+.hero-stats .stat { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 12px; padding: 14px 12px; display: grid; text-align: left; box-shadow: var(--shadow-sm); cursor: pointer; transition: border-color 120ms, transform 120ms }
 .hero-stats .stat:hover { border-color: var(--color-brand); transform: translateY(-1px) }
 .hero-stats .stat[aria-expanded="true"] { border-color: var(--color-brand); box-shadow: 0 0 0 2px var(--color-brand) }
 .stat-breakdown { grid-column: 1 / -1; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 12px; padding: 12px 14px; box-shadow: var(--shadow-sm) }
@@ -96,7 +99,6 @@ p { margin-top: 0 }
 .stat-pill:hover { border-color: var(--color-brand); color: var(--color-brand) }
 .stat-pill[aria-pressed="true"] { background: var(--color-brand); border-color: var(--color-brand); color: #fff }
 .stat-pill[aria-pressed="true"] b { color: #fff }
-.stat-pill.is-static, .stat-pill.is-static:hover { cursor: default; border-color: var(--color-border-strong); color: inherit }
 .partner-list { display: grid; gap: 10px }
 .partner-item { padding-bottom: 10px; border-bottom: 1px solid var(--color-border) }
 .partner-item:last-child { border-bottom: 0; padding-bottom: 0 }
@@ -235,6 +237,10 @@ dialog label.choice-card:has(input:checked) { border-color: var(--color-brand); 
 dialog label.choice-card:has(input:disabled) { opacity: .5; cursor: not-allowed }
 .check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 2px 12px }
 .city-pickers { display: grid; gap: 10px }
+/* Rapor penceresi: aramayla eşleşen etkinlikler, ad üstte, tarih / il altta. */
+dialog .report-matches { grid-template-columns: 1fr }
+dialog .report-matches label { align-items: flex-start }
+dialog .report-matches small { display: block; font-weight: 400; color: var(--color-text-muted) }
 /* Kapsam kartlarıyla aynı genişlik: üç sütunluk ızgarada iki kart. */
 .city-toggles { grid-template-columns: repeat(3, minmax(0, 1fr)) }
 .check-scroll { max-height: 220px; overflow-y: auto; border: 1px solid var(--color-border); border-radius: 8px; padding: 8px 10px }
@@ -293,12 +299,14 @@ dialog.wide { width: min(860px, calc(100% - 32px)) }
 .password-row .button { white-space: nowrap; min-height: 44px }
 
 @media (max-width: 1040px) {
+  .hero-stats { grid-template-columns: repeat(4, minmax(0, 1fr)) }
   .hero-inner { grid-template-columns: 1fr; gap: 28px }
   .workspace { grid-template-columns: 1fr }
   aside { position: static }
 }
 @media (max-width: 720px) {
   .container { width: calc(100% - 28px) }
+  .hero-stats { grid-template-columns: repeat(2, minmax(0, 1fr)) }
   .page-hero { padding: 36px 0 32px }
   .grid { gap: 0; grid-template-columns: 1fr; border: 0 }
   .week { display: none }
