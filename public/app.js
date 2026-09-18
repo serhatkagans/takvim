@@ -9,7 +9,7 @@ const dayFormat = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'lon
 const rangeFormat = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
 
 let month = new Date(nowString + 'T12:00:00'); month.setDate(1);
-let meta, events = [], allEvents = [], onlyMonth = false, selected, mode = 'month', sequence = 0, openStat = null, expandedDay = null;
+let meta, events = [], allEvents = [], period = null, selected, mode = 'month', sequence = 0, openStat = null, expandedDay = null;
 /* Takvim ya tek ayı ya da seçilen tarih aralığını gösterir. Aralık seçiliyken
    kaç ay sürüyorsa o kadar ay kutusu alt alta çizilir ve kayıtlar aydan aya
    istenmek yerine tümü (allEvents) üzerinden süzülür. */
@@ -27,7 +27,7 @@ const subtypeLabel = e => listOf(e.subtypes).join(', ');
 const groupLabel = e => listOf(e.work_groups).join(', ');
 const partnersOf = e => { try { const value = JSON.parse(e.partners || '[]'); return Array.isArray(value) ? value : []; } catch { return []; } };
 const partnerLabel = p => [p.person, p.org].filter(Boolean).join(' – ');
-const MAX_PHOTOS = 5, MAX_PARTNERS = 20, MAX_DAY_EVENTS = 3;
+const MAX_PHOTOS = 7, MAX_PHOTO_MB = 15, MAX_PARTNERS = 20, MAX_DAY_EVENTS = 3;
 /* Sayaç dökümünde bir değer seçilince altında listelenen en fazla etkinlik. */
 const MAX_STAT_EVENTS = 10;
 /* Dökümde "devamını göster" ile açılmış listeler; kart değişince sıfırlanır. */
@@ -35,7 +35,7 @@ const expandedLists = new Set();
 /* Kenar çubuğundaki süzgeç kutuları; "Filtreleri temizle" hepsini boşaltır. */
 /* Durum kutusunun kimliği '#event-status': '#status' sayfadaki durum mesajı satırıdır. */
 const FILTERS = ['#search', '#city', '#theme', '#subtype', '#event-status'];
-const anyFilter = () => FILTERS.some(selector => $(selector).value) || $('#mine').checked;
+const anyFilter = () => FILTERS.some(selector => $(selector).value) || $('#mine').checked || period !== null;
 /* Çok illi ortak etkinlik takvim kutucuğunu taşırmasın. */
 const placeLabel = e => (listOf(e.cities).length > 3 ? `${listOf(e.cities).length} il ortak` : e.city);
 
@@ -129,6 +129,15 @@ const inRange = event => event.start < shiftDay(rangeTo, 1) + 'T00:00' && event.
 /** Görüntülenen dönemin (ay ya da tarih aralığı) süzgeçten geçmiş etkinlikleri. */
 const shownEvents = (skip = '') => (rangeOn() ? filtered(allEvents, skip).filter(inRange) : filtered(events, skip).filter(inMonth));
 
+/** Sayaç dönemleri: program yılları 1 Eylül – 31 Ağustos. */
+const PROGRAM_YEARS = [1, 2, 3].map(n => ({ label: `${n}. Yıl`, from: `${2023 + n}-09-01`, to: `${2024 + n}-09-01` }));
+const inYear = ({ from, to }) => e => e.start < to + 'T00:00' && e.end > from + 'T00:00';
+/** Sayaçların kümesi: tümü, görüntülenen ay / aralık ya da seçili program yılı. */
+function periodEvents(skip = '') {
+  if (period === 'month') return shownEvents(skip);
+  return period === null ? filtered(allEvents, skip) : filtered(allEvents, skip).filter(inYear(PROGRAM_YEARS[period]));
+}
+
 /** Aralığın değdiği ayların ilk günleri; çok uzun aralıklar kırpılır. */
 function monthsInRange() {
   const list = [], cursor = new Date(rangeFrom + 'T12:00:00'), last = new Date(rangeTo + 'T12:00:00');
@@ -149,7 +158,7 @@ function timeLabel(event) {
 
 function feedUrl() {
   const params = new URLSearchParams();
-  if ($('#city').value) params.set('il', $('#city').value);
+  if (city) params.set('il', city);
   if ($('#theme').value) params.set('tema', $('#theme').value);
   if ($('#subtype').value) params.set('alt', $('#subtype').value);
   if ($('#event-status').value) params.set('durum', $('#event-status').value);
@@ -180,9 +189,9 @@ function render() {
   /* Sayaçlar varsayılan olarak tüm kayıtları, "Yalnızca görüntülenen ay"
      seçiliyse o ayı anlatır; başlık hangisi olduğunu yazar.
      Süzgeçler ve arama metni her durumda uygulanır. */
-  const counted = onlyMonth ? current : filtered(allEvents);
-  $('#stat-caption').textContent = onlyMonth ? $('#month-title').textContent : 'Tüm etkinlikler';
-  $('#stat-month').checked = onlyMonth;
+  const counted = periodEvents();
+  $('#stat-caption').textContent = period === 'month' ? $('#month-title').textContent : period === null ? 'Tüm etkinlikler' : PROGRAM_YEARS[period].label;
+  for (const box of document.querySelectorAll('[data-period]')) box.checked = box.dataset.period === String(period);
   /* Süzgeç yokken düğme durur ama pasiftir: kartların orada da görünsün. */
   $('#stat-clear').disabled = !anyFilter();
   for (const [key, stat] of Object.entries(statFilters)) $('#stat-' + key).textContent = statTotal(stat, counted);
@@ -253,11 +262,13 @@ const groupsOf = e => listOf(e.work_groups);
 const placesOf = e => (e.cities ? listOf(e.cities) : [e.scope]);
 const statFilters = {
   /* `all`: hiç etkinliği olmayan türler de listelenir (0 adetle). */
-  done: { select: '#subtype', label: 'Tamamlanan etkinlikler, türlerine göre', subset: e => e.status === 'Tamamlandı', values: e => listOf(e.subtypes), all: eventTypes },
+  /* `showAll`: kartın ana listesi kısaltılmaz, "Devamını göster" çıkmaz.
+     `first`: bu değer (YEĞİTEK, il değil) sayısından bağımsız en başta durur. */
+  done: { select: '#subtype', label: 'Tamamlanan etkinlikler, türlerine göre', subset: e => e.status === 'Tamamlandı', values: e => listOf(e.subtypes), all: eventTypes, showAll: true },
   upcoming: { select: '#subtype', label: 'Planlanan ve ertelenen etkinlikler, türlerine göre', subset: e => e.status === 'Planlandı' || e.status === 'Ertelendi', values: e => listOf(e.subtypes), all: eventTypes },
   /* Etkinliğin yapıldığı il değil, kaydı giren hesabın yetki alanı sayılır. */
-  cities: { select: '#city', label: 'Etkinliği giren ile göre etkinlikler', values: e => [ownerCity(e)], distinct: true, byOwnerCity: true },
-  themes: { select: '#theme', label: 'Çalışma grupları ve ait oldukları etkinlikler', values: groupsOf, distinct: true, byGroup: true },
+  cities: { select: '#city', label: 'Etkinliği giren ile göre etkinlikler', values: e => [ownerCity(e)], distinct: true, showAll: true, first: ownerCity({}) },
+  themes: { select: '#theme', label: 'Çalışma grupları', values: groupsOf, all: () => meta.groups, distinct: true, showAll: true },
   /* `byEvent`: il yerine her etkinliğin kendi katılımcı sayısı; tıklamak etkinliği açar. */
   students: { select: '#city', label: 'Etkinliklere göre katılan öğrenci sayısı', values: placesOf, weight: e => e.students || 0, byEvent: true },
   teachers: { select: '#city', label: 'Etkinliklere göre katılan öğretmen sayısı', values: placesOf, weight: e => e.teachers || 0, byEvent: true },
@@ -273,30 +284,42 @@ function statTotal(stat, list) {
 }
 
 /** Listenin ilk MAX_STAT_EVENTS öğesi; fazlası alttaki düğmeyle açılır / kapanır. */
-function limited(key, items, draw) {
-  const open = expandedLists.has(key), shown = open ? items : items.slice(0, MAX_STAT_EVENTS);
+function limited(key, items, draw, all = false) {
+  const open = all || expandedLists.has(key), shown = open ? items : items.slice(0, MAX_STAT_EVENTS);
   return {
     html: shown.map(item => draw(item)).join(''),
-    more: items.length > MAX_STAT_EVENTS
+    more: !all && items.length > MAX_STAT_EVENTS
       ? `<button type="button" class="day-more stat-more" data-more="${escapeHtml(key)}">${open ? 'Daha az göster' : `Devamını göster (+${items.length - MAX_STAT_EVENTS})`}</button>`
       : '',
   };
 }
 
-/** Başlık (kurum / çalışma grubu) altında o başlığa ait etkinlikler; en kalabalık başlık başta.
-    `boxes`: etkinlikler küçük düğme yerine arama sonucu gibi kutu kutu alt alta. */
-function groupedEvents(label, rows, empty, boxes = false) {
+/** Başlık (paydaş kurum) altında o başlığa ait etkinlikler; en kalabalık başlık başta. */
+function groupedEvents(label, rows, empty) {
   rows.sort((a, b) => b[1].size - a[1].size || a[0].localeCompare(b[0], 'tr'));
   const pill = e => `<button type="button" class="stat-pill" data-event="${e.id}">${escapeHtml(e.title)} <b>${escapeHtml(e.start.slice(8, 10) + '.' + e.start.slice(5, 7) + '.' + e.start.slice(0, 4))}</b></button>`;
   const item = ([name, joined, note]) => {
-    const inner = limited(`${openStat}:${name}`, [...joined].sort((a, b) => b.start.localeCompare(a.start)), boxes ? e => resultItem(e) : pill);
+    const inner = limited(`${openStat}:${name}`, [...joined].sort((a, b) => b.start.localeCompare(a.start)), pill);
     return `<div class="partner-item"><strong>${escapeHtml(name)}</strong>`
       + (note ? ` <small>(${escapeHtml(note)})</small>` : '')
-      + ` <small>· ${joined.size} etkinlik</small><div class="${boxes ? 'stat-events' : 'stat-pills'}">${inner.html}</div>${inner.more}</div>`;
+      + ` <small>· ${joined.size} etkinlik</small><div class="stat-pills">${inner.html}</div>${inner.more}</div>`;
   };
-  const outer = limited(openStat, rows, item);
+  const outer = limited(openStat, rows, item, statFilters[openStat].showAll);
   return `<p>${label} · etkinliğe tıklayarak ayrıntıyı açın</p>`
     + (rows.length ? `<div class="partner-list">${outer.html}</div>${outer.more}` : `<p>${empty}</p>`);
+}
+
+const pillButton = (value, count, active) =>
+  `<button type="button" class="stat-pill" data-filter="${openStat}" data-value="${escapeHtml(value)}" aria-pressed="${value === active}">${escapeHtml(value)} <b>${count.toLocaleString('tr-TR')}</b></button>`;
+
+/** Öğrenci / öğretmen / paydaş kartının il düğmeleri: her ilin toplamı, en kalabalığı başta. */
+function placePills(list, values, weight, active) {
+  const counts = new Map();
+  for (const e of list) if (weight(e) > 0) for (const value of values(e)) counts.set(value, (counts.get(value) || 0) + weight(e));
+  const rows = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'tr'));
+  if (!rows.length) return '';
+  return `<p>İllere göre${active ? ' · seçimi kaldırmak için tekrar tıklayın' : ' · süzmek için tıklayın'}</p>`
+    + `<div class="stat-pills">${rows.map(([value, count]) => pillButton(value, count, active)).join('')}</div>`;
 }
 
 function renderBreakdown() {
@@ -304,49 +327,41 @@ function renderBreakdown() {
   const box = $('#stat-breakdown');
   box.hidden = !openStat;
   if (!openStat) return;
-  const { select, label, subset = () => true, values, weight, all, byEvent, byPartner, byGroup, byOwnerCity } = statFilters[openStat];
-  const list = (onlyMonth ? shownEvents(select) : filtered(allEvents, select)).filter(subset);
-  if (byOwnerCity) {
-    const owners = new Map();
-    for (const e of list) owners.set(ownerCity(e), (owners.get(ownerCity(e)) || new Set()).add(e));
-    box.innerHTML = groupedEvents(label, [...owners].map(([name, joined]) => [name, joined]), 'Gösterilecek etkinlik yok.', true);
-    return;
-  }
-  if (byGroup) {
-    const groups = new Map();
-    for (const e of list) for (const group of groupsOf(e)) groups.set(group, (groups.get(group) || new Set()).add(e));
-    box.innerHTML = groupedEvents(label, [...groups].map(([name, joined]) => [name, joined]), 'Gösterilecek çalışma grubu yok.', true);
-    return;
-  }
+  const { select, label, subset = () => true, values, weight, all, byEvent, byPartner, showAll, first } = statFilters[openStat];
+  const list = periodEvents(select).filter(subset);
+  const active = $(select).value;
+  /* Kişi / paydaş kartlarında il düğmeleri; seçilen ilin etkinlikleri altta. */
+  const inPlace = e => !active || values(e).includes(active);
   if (byPartner) {
     const partners = new Map();
-    for (const e of list) for (const p of partnersOf(e)) {
+    for (const e of list.filter(inPlace)) for (const p of partnersOf(e)) {
       const name = p.org || p.person, entry = partners.get(name) || { events: new Set(), people: new Set() };
       entry.events.add(e);
       if (p.org && p.person) entry.people.add(p.person);
       partners.set(name, entry);
     }
-    box.innerHTML = groupedEvents(label, [...partners].map(([name, { events: joined, people }]) => [name, joined, [...people].join(', ')]), 'Gösterilecek paydaş yok.');
+    box.innerHTML = placePills(list, values, weight, active)
+      + groupedEvents(label, [...partners].map(([name, { events: joined, people }]) => [name, joined, [...people].join(', ')]), 'Gösterilecek paydaş yok.');
     return;
   }
   if (byEvent) {
-    const rows = list.filter(e => weight(e) > 0).sort((a, b) => weight(b) - weight(a) || b.start.localeCompare(a.start));
+    const rows = list.filter(e => weight(e) > 0 && inPlace(e)).sort((a, b) => weight(b) - weight(a) || b.start.localeCompare(a.start));
     const unit = openStat === 'teachers' ? 'öğretmen' : 'öğrenci';
     const shown = limited(openStat, rows, e => resultItem(e, `${weight(e).toLocaleString('tr-TR')} ${unit}`));
-    box.innerHTML = `<p>${label} · ayrıntı için tıklayın</p>`
+    box.innerHTML = placePills(list, values, weight, active) + `<p>${label} · ayrıntı için tıklayın</p>`
       + `<div class="stat-events">${rows.length ? shown.html : '<div class="empty">Gösterilecek etkinlik yok.</div>'}</div>${shown.more}`;
     return;
   }
   const counts = new Map(all ? all().map(value => [value, 0]) : []);
   for (const e of list) for (const value of values(e)) counts.set(value, (counts.get(value) || 0) + (weight ? weight(e) : 1));
-  const rows = [...counts].filter(([, count]) => count > 0 || all).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'tr'));
-  const active = $(select).value;
+  const rows = [...counts].filter(([, count]) => count > 0 || all).sort((a, b) => (b[0] === first) - (a[0] === first) || b[1] - a[1] || a[0].localeCompare(b[0], 'tr'));
   /* Seçili değerin etkinlikleri, en yenisi başta, hemen altında listelenir. */
   const chosen = active ? list.filter(e => values(e).includes(active)).sort((a, b) => b.start.localeCompare(a.start)) : [];
-  /* Seçili değer kısaltılan kısımda kalsa da görünsün diye başa alınır. */
-  const pills = limited(openStat, active ? [...rows.filter(([value]) => value === active), ...rows.filter(([value]) => value !== active)] : rows,
-    ([value, count]) => `<button type="button" class="stat-pill" data-filter="${openStat}" data-value="${escapeHtml(value)}" aria-pressed="${value === active}">${escapeHtml(value)} <b>${count.toLocaleString('tr-TR')}</b></button>`);
-  const events = limited(`${openStat}:${active}`, chosen, e => resultItem(e));
+  /* Düğmeler yer değiştirmesin diye sıra sabit kalır; seçili değer yalnızca kısaltılan kısımda kalırsa başa alınır. */
+  const hidden = active && !showAll && !expandedLists.has(openStat) && rows.findIndex(([value]) => value === active) >= MAX_STAT_EVENTS;
+  const pills = limited(openStat, hidden ? [...rows.filter(([value]) => value === active), ...rows.filter(([value]) => value !== active)] : rows,
+    ([value, count]) => pillButton(value, count, active), showAll);
+  const events = limited(`${openStat}:${active}`, chosen, e => resultItem(e), openStat === 'done');
   box.innerHTML = `<p>${label}${active ? ' · seçimi kaldırmak için tekrar tıklayın' : ' · süzmek için tıklayın'}</p>`
     + (rows.length ? `<div class="stat-pills">${pills.html}</div>${pills.more}` : '<p>Gösterilecek etkinlik yok.</p>')
     + (active
@@ -355,7 +370,11 @@ function renderBreakdown() {
       : '');
 }
 
-$('#stat-month').addEventListener('change', event => { onlyMonth = event.target.checked; if (meta) render(); });
+/* Dönem kutuları tek seçimlidir; seçili kutuya yeniden basmak tüm etkinliklere döner. */
+for (const box of document.querySelectorAll('[data-period]')) box.addEventListener('change', () => {
+  period = !box.checked ? null : box.dataset.period === 'month' ? 'month' : Number(box.dataset.period);
+  if (meta) render();
+});
 $('#mine').addEventListener('change', () => { if (meta) render(); });
 
 document.querySelector('.hero-stats').addEventListener('click', event => {
@@ -479,19 +498,12 @@ function renderPhotos() {
   $('#photo-add').disabled = total >= MAX_PHOTOS;
 }
 
-/** Telefon fotoğrafları yüklemeden önce en uzun kenarı 1600 px olacak şekilde
-    küçültülüp JPEG'e çevrilir (sunucu sınırı 3 MB). */
-async function shrinkPhoto(file) {
-  let bitmap;
-  try { bitmap = await createImageBitmap(file); } catch { throw Error(`"${file.name}" açılamadı. JPEG, PNG veya WebP fotoğraf seçin.`); }
-  const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
-  const canvas = Object.assign(document.createElement('canvas'), { width: Math.round(bitmap.width * scale), height: Math.round(bitmap.height * scale) });
-  const context = canvas.getContext('2d');
-  context.fillStyle = '#fff'; /* saydam PNG siyah zemine düşmesin */
-  context.fillRect(0, 0, canvas.width, canvas.height);
-  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  bitmap.close();
-  return new Promise((resolve, reject) => canvas.toBlob(blob => (blob ? resolve(blob) : reject(Error('Fotoğraf hazırlanamadı.'))), 'image/jpeg', 0.85));
+/** Fotoğraf küçültülmeden, özgün hâliyle yüklenir; burada yalnızca tür ve
+    boyut denetlenir (sunucu da aynı sınırları uygular). */
+function checkPhoto(file) {
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) throw Error(`"${file.name}" yüklenemez. JPEG, PNG veya WebP fotoğraf seçin.`);
+  if (file.size > MAX_PHOTO_MB * 1024 * 1024) throw Error(`"${file.name}" çok büyük; bir fotoğraf en fazla ${MAX_PHOTO_MB} MB olabilir.`);
+  return file;
 }
 
 async function savePhotos(id) {
@@ -502,7 +514,7 @@ async function savePhotos(id) {
   }
   while (photoState.pending.length) {
     const [next] = photoState.pending;
-    const response = await fetch(`api/events/${id}/photos`, { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: next.blob });
+    const response = await fetch(`api/events/${id}/photos`, { method: 'POST', headers: { 'Content-Type': next.blob.type }, body: next.blob });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw Error(result.error || 'Fotoğraf yüklenemedi.');
     photoState.pending.shift();
@@ -588,6 +600,7 @@ $('#calendar').addEventListener('click', event => {
 function clearFilters() {
   for (const selector of FILTERS) $(selector).value = '';
   $('#mine').checked = false;
+  period = null;
   reload();
 }
 $('#clear').onclick = clearFilters;
@@ -802,6 +815,9 @@ $('#report').onclick = () => {
   const form = $('#report-form'), key = dateKey(month);
   form.elements.from.value = rangeOn() ? rangeFrom : key;
   form.elements.to.value = rangeOn() ? rangeTo : monthEnd(key);
+  /* İl listesi soldaki süzgeçle aynıdır; açılışta oradaki seçimle gelir. */
+  form.elements.city.innerHTML = $('#city').innerHTML;
+  form.elements.city.value = $('#city').value;
   form.querySelector('.error').textContent = '';
   $('#report-dialog').showModal();
 };
@@ -809,10 +825,10 @@ $('#report').onclick = () => {
 /** Bağlantı yerine fetch: oturum düşmüşse tarayıcı hata JSON'unu rapor
     dosyası diye kaydetmesin, mesaj pencerede görünsün. */
 $('#report-form').onsubmit = submitHandler(async form => {
-  const { from, to, format } = Object.fromEntries(new FormData(form));
+  const { from, to, format, city } = Object.fromEntries(new FormData(form));
   if (to < from) throw Error('Bitiş tarihi başlangıç tarihinden önce olamaz.');
   const params = new URLSearchParams({ bas: from, bit: to, bicim: format });
-  if ($('#city').value) params.set('il', $('#city').value);
+  if (city) params.set('il', city);
   if ($('#theme').value) params.set('tema', $('#theme').value);
   if ($('#subtype').value) params.set('alt', $('#subtype').value);
   if ($('#event-status').value) params.set('durum', $('#event-status').value);
@@ -851,7 +867,7 @@ $('#photo-input').addEventListener('change', async event => {
   error.textContent = files.length > room ? `Bir etkinliğe en fazla ${MAX_PHOTOS} fotoğraf eklenebilir; seçtiklerinizin ilk ${room} tanesi alındı.` : '';
   try {
     for (const file of files.slice(0, room)) {
-      const blob = await shrinkPhoto(file);
+      const blob = checkPhoto(file);
       photoState.pending.push({ blob, url: URL.createObjectURL(blob) });
       renderPhotos();
     }

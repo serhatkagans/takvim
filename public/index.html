@@ -35,7 +35,10 @@
       <div class="hero-stats">
         <div class="stats-head">
           <p class="eyebrow" id="stat-caption">Tüm etkinlikler</p>
-          <label class="check stats-toggle"><input id="stat-month" type="checkbox"> Yalnızca görüntülenen dönem</label>
+          <label class="check stats-toggle"><input id="stat-month" type="checkbox" data-period="month"> Yalnızca görüntülenen dönem</label>
+          <label class="check stats-toggle" title="1 Eylül 2024 – 31 Ağustos 2025"><input type="checkbox" data-period="0"> 1. Yıl</label>
+          <label class="check stats-toggle" title="1 Eylül 2025 – 31 Ağustos 2026"><input type="checkbox" data-period="1"> 2. Yıl</label>
+          <label class="check stats-toggle" title="1 Eylül 2026 – 31 Ağustos 2027"><input type="checkbox" data-period="2"> 3. Yıl</label>
           <label class="check stats-toggle" id="mine-label" hidden><input id="mine" type="checkbox"> Kendi girdiğim etkinlikler</label>
           <button type="button" id="stat-clear" class="text-link" disabled>Filtreleri temizle</button>
         </div>
@@ -209,11 +212,12 @@
 <dialog id="report-dialog">
   <form id="report-form">
     <div class="dialog-top"><h2>Faaliyet raporu</h2><button type="button" class="close" data-close aria-label="Kapat">×</button></div>
-    <p>Seçtiğiniz dönemdeki etkinlikler, soldaki süzgeçler (kapsam / il, çalışma grubu, tür, durum) uygulanarak indirilir.</p>
+    <p>Seçtiğiniz dönemdeki etkinlikler, seçtiğiniz il ve soldaki süzgeçler (çalışma grubu, tür, durum) uygulanarak indirilir.</p>
     <div class="form-row">
       <label>Başlangıç tarihi<input name="from" type="date" min="2000-01-01" max="2099-12-31" required></label>
       <label>Bitiş tarihi<input name="to" type="date" min="2000-01-01" max="2099-12-31" required></label>
     </div>
+    <label>Kapsam / il<select name="city"></select></label>
     <fieldset class="choice">
       <legend>Dosya biçimi</legend>
       <div class="choice-cards">

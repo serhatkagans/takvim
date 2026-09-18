@@ -44,7 +44,7 @@ test('il, tema ve tür listeleri', () => {
   assert.ok(groups.includes('Espor') && !groups.includes('Genel'));
   assert.equal(categories.length, 1, 'tür artık sorulmuyor, tek değer yazılır');
   for (const kind of categories) assert.ok(Array.isArray(subtypes[kind]), kind + ' alt seçenekleri');
-  for (const name of ['Genç Gölge', 'Görünürlük / Tanıtım', 'Diğer']) assert.ok(subtypes['Temel GençTek etkinliği'].includes(name), name + ' seçilebilir');
+  for (const name of ['Genç Gölge', 'Görünürlük / Tanıtım / Planlama / Çalıştay', 'Diğer']) assert.ok(subtypes['Temel GençTek etkinliği'].includes(name), name + ' seçilebilir');
   assert.ok(!categories.includes(GROUP_KIND), 'çalışma grubu artık tür değil');
 });
 
@@ -100,7 +100,7 @@ test('etkinlik doğrulama', () => {
   assert.throws(() => validateEvent({ ...sample, subtypes: ['Robotik'] }, merkez), ValidationError, 'grup, alt tür olamaz');
   assert.throws(() => validateEvent({ ...sample, work_groups: ['Olmayan grup'] }, merkez), ValidationError);
   assert.equal(validateEvent({ ...sample, subtypes: ['Sahne Senin', 'Genç Gölge'] }, merkez).subtypes, '|Genç Gölge|Sahne Senin|', 'liste sırasıyla saklanır');
-  assert.equal(validateEvent({ ...sample, subtypes: ['Görünürlük / Tanıtım'] }, merkez).subtypes, '|Görünürlük / Tanıtım|');
+  assert.equal(validateEvent({ ...sample, subtypes: ['Görünürlük / Tanıtım / Planlama / Çalıştay'] }, merkez).subtypes, '|Görünürlük / Tanıtım / Planlama / Çalıştay|');
   assert.throws(() => validateEvent({ ...sample, subtypes: ['Atölye'] }, merkez), ValidationError, 'eski tür adı kabul edilmez');
   assert.throws(() => validateEvent({ ...sample, status: 'Belirsiz' }, merkez), ValidationError);
   assert.equal(validateEvent({ ...sample, status: 'Tamamlandı' }, merkez).status, 'Tamamlandı');
@@ -296,21 +296,21 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
     assert.equal(records[0].students, 40);
     assert.equal(JSON.parse(records[0].partners)[0].org, 'Bilim Merkezi');
 
-    /* Fotoğraflar: en fazla 5, imzası denetlenir, görüntüleme herkese açık */
+    /* Fotoğraflar: en fazla 7, imzası denetlenir, görüntüleme herkese açık */
     const upload = (bytes, cookieValue) => fetch(`${origin}/api/events/${id}/photos`, { method: 'POST', headers: { Origin: origin, 'Content-Type': 'image/jpeg', Cookie: cookieValue }, body: bytes });
     const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
     assert.equal((await upload(jpeg, '')).status, 401);
     assert.equal((await upload(Buffer.from('<svg onload=alert(1)>'), cookie)).status, 400, 'fotoğraf olmayan dosya reddedilir');
     const photoIds = [];
-    for (let i = 0; i < 5; i++) { const response = await upload(jpeg, cookie); assert.equal(response.status, 201); photoIds.push((await response.json()).id); }
-    assert.equal((await upload(jpeg, cookie)).status, 400, 'altıncı fotoğraf reddedilir');
+    for (let i = 0; i < 7; i++) { const response = await upload(jpeg, cookie); assert.equal(response.status, 201); photoIds.push((await response.json()).id); }
+    assert.equal((await upload(jpeg, cookie)).status, 400, 'sekizinci fotoğraf reddedilir');
     assert.equal((await request('/api/photos/' + photoIds[0])).status, 401, 'fotoğraf oturum ister');
     const photo = await request('/api/photos/' + photoIds[0], 'GET', null, cookie);
     assert.equal(photo.status, 200);
     assert.equal(photo.headers.get('content-type'), 'image/jpeg');
     assert.deepEqual(Buffer.from(await photo.arrayBuffer()), jpeg);
-    assert.equal((await request(`/api/events/${id}/photos/${photoIds[4]}`, 'DELETE', null, cookie)).status, 200);
-    assert.deepEqual((await (await request(`/api/events/${id}/photos`, 'GET', null, cookie)).json()).map(p => p.id), photoIds.slice(0, 4));
+    assert.equal((await request(`/api/events/${id}/photos/${photoIds[6]}`, 'DELETE', null, cookie)).status, 200);
+    assert.deepEqual((await (await request(`/api/events/${id}/photos`, 'GET', null, cookie)).json()).map(p => p.id), photoIds.slice(0, 6));
     assert.equal('url' in records[0], false, 'katılım bağlantısı artık dönmez');
     /* Kaydı kimin açtığı "kendi girdiğim etkinlikler" süzgeci için dönüyor. */
     const sahipli = await (await request('/api/events?tum=1', 'GET', null, cookie)).json();
@@ -408,7 +408,7 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
     assert.ok(fotoParts['icindekiler.txt'], 'içindekiler listesi arşivde');
     assert.match(fotoParts['icindekiler.txt'].toString('utf8'), /Yapay zekâ tanışma toplantısı/);
     const fotoNames = Object.keys(fotoParts).filter(name => name.endsWith('.jpg'));
-    assert.equal(fotoNames.length, 4, 'silinen hariç dört fotoğraf arşivde');
+    assert.equal(fotoNames.length, 6, 'silinen hariç altı fotoğraf arşivde');
     /* Klasör de dosya adı da etkinliği taşır: hangi resim hangi etkinliğin, karışmaz. */
     assert.ok(fotoNames.every(name => name.startsWith('2026-09-16 ') && name.includes('/2026-09-16 ')), fotoNames.join(', '));
     assert.deepEqual(fotoParts[fotoNames[0]], jpeg);
