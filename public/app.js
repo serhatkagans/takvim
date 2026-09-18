@@ -201,7 +201,13 @@ function render() {
   const query = $('#search').value.trim(), results = query.length >= 2 ? filtered(allEvents).sort((a, b) => b.start.localeCompare(a.start)) : [];
   $('#search-results').hidden = query.length < 2;
   $('#search-title').textContent = `“${query}” · ${results.length} etkinlik`;
-  $('#search-list').innerHTML = results.length ? results.map(resultItem).join('') : '<div class="empty">Aramanızla eşleşen etkinlik bulunamadı.</div>';
+  /* Adında geçenler başta; açıklama, paydaş vb. alanlarda geçenler ayrı başlık altında. */
+  const needle = $('#search').value.toLocaleLowerCase('tr-TR'), inTitle = e => e.title.toLocaleLowerCase('tr-TR').includes(needle);
+  const titled = results.filter(inTitle), elsewhere = results.filter(e => !inTitle(e));
+  const group = (heading, list) => (list.length ? `<p>${heading} · ${list.length}</p>${list.map(e => resultItem(e)).join('')}` : '');
+  $('#search-list').innerHTML = results.length
+    ? group('Adında geçen', titled) + group('Açıklama, paydaş vb. alanlarda geçen', elsewhere)
+    : '<div class="empty">Aramanızla eşleşen etkinlik bulunamadı.</div>';
 
   $('#agenda').innerHTML = current.length
     ? current.map(e => `<button class="agenda-item ${statusClass(e.status)}" data-event="${e.id}"><span class="agenda-date">${escapeHtml(e.start.slice(8, 10) + '.' + e.start.slice(5, 7))}<small>${escapeHtml(e.start.slice(0, 4))}</small></span><span class="agenda-body"><strong>${escapeHtml(e.title)}</strong><small>${escapeHtml([e.city, subtypeLabel(e), locationLabel(e)].join(' · '))}</small>${e.status === 'Planlandı' ? '' : `<small>${escapeHtml(e.status)}</small>`}</span></button>`).join('')
