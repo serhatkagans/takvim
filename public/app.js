@@ -859,13 +859,14 @@ $('#report').onclick = () => {
 /* Aramayla eşleşen ama işareti kaldırılan kayıtlar; arama değişse de hatırlanır. */
 const reportSkipped = new Set();
 
-/** Arama yazılıysa dönemde, seçili il / kapsamda ve aramayla eşleşen etkinlikler
+/** Arama yazılıysa dönemde, seçili il / kapsamda ve adı aramayla eşleşen etkinlikler
     işaretli liste olarak çıkar; aynı adlı kayıtlar tarih ve iliyle ayırt edilir. */
 function reportMatches() {
   const form = $('#report-form'), { from, to, city } = form.elements, query = form.elements.search.value.trim().toLocaleLowerCase('tr-TR');
   if (query.length < 2 || !from.value || !to.value) return null;
   const next = shiftDay(to.value, 1) + 'T00:00';
-  return allEvents.filter(e => e.start < next && e.end > from.value + 'T00:00' && inPlace(e, city.value) && searchText(e).includes(query))
+  /* Raporda yalnızca etkinlik adına bakılır; açıklama ve paydaşlar aranmaz. */
+  return allEvents.filter(e => e.start < next && e.end > from.value + 'T00:00' && inPlace(e, city.value) && e.title.toLocaleLowerCase('tr-TR').includes(query))
     .sort((a, b) => b.start.localeCompare(a.start));
 }
 

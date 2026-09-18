@@ -203,13 +203,13 @@
 <dialog id="report-dialog">
   <form id="report-form">
     <div class="dialog-top"><h2>Faaliyet raporu</h2><button type="button" class="close" data-close aria-label="Kapat">×</button></div>
-    <p>Seçtiğiniz dönemdeki etkinlikler, seçtiğiniz kapsam / ile ve yazdığınız aramaya göre indirilir.</p>
+    <p>Seçtiğiniz dönemdeki etkinlikler, seçtiğiniz kapsam / ile ve etkinlik adında yazdığınız aramaya göre indirilir.</p>
     <div class="form-row">
       <label>Başlangıç tarihi<input name="from" type="date" min="2000-01-01" max="2099-12-31" required></label>
       <label>Bitiş tarihi<input name="to" type="date" min="2000-01-01" max="2099-12-31" required></label>
     </div>
     <label>Kapsam / il<select name="city"></select></label>
-    <label>Etkinlik ara <small>isteğe bağlı · ad, açıklama, paydaş…</small><input name="search" type="search" maxlength="100" placeholder="Örn. Tek Maraton"></label>
+    <label>Etkinlik adı ara <small>isteğe bağlı · yalnızca etkinlik adında arar</small><input name="search" type="search" maxlength="100" placeholder="Örn. Tek Maraton"></label>
     <!-- Aramayla eşleşenler: rapora yalnızca işaretli olanlar girer. -->
     <fieldset class="choice" id="report-matches-field" hidden>
       <legend>Rapora girecek etkinlikler <small id="report-matches-count"></small></legend>

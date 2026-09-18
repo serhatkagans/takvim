@@ -165,9 +165,9 @@ const canManage = (user, event) => !user.city
 /** Serbest metin araması: ad, yer, açıklama, il, grup, tür, amaç ve paydaşlarda.
     LIKE jokerleri (% _) kaçırılır; PostgreSQL'de LIKE, ILIKE'a çevrilir. */
 const SEARCH_FIELDS = ['title', 'location', 'description', 'city', 'theme', 'subtypes', 'purpose', 'partners'];
-function searchSql(query) {
+function searchSql(query, fields = SEARCH_FIELDS) {
   const pattern = '%' + query.replace(/[\\%_]/g, c => '\\' + c) + '%';
-  return { clause: `(${SEARCH_FIELDS.map(field => `${field} LIKE ? ESCAPE '\\'`).join(' OR ')})`, params: SEARCH_FIELDS.map(() => pattern) };
+  return { clause: `(${fields.map(field => `${field} LIKE ? ESCAPE '\\'`).join(' OR ')})`, params: fields.map(() => pattern) };
 }
 
 const liveEvents = (where, params) => db.all(`SELECT ${FIELDS} FROM events WHERE deleted_at IS NULL AND ${where} ORDER BY start`, params);
@@ -215,8 +215,8 @@ const server = createServer(async (req, res) => {
 
     /* ---- Faaliyet raporu (Word / Excel) — yalnızca yöneticiler ----------
        Dönem `bas`–`bit` (iki gün dahil) ya da tek ay (`ay=2026-09`).
-       Süzgeçler (il / çalışma grubu / tür) ve `ara` metni (etkinlik adı,
-       açıklama, paydaş…) uygulanır; döneme değen her etkinlik girer (sınırı
+       Süzgeçler (il / çalışma grubu / tür) ve `ara` metni (yalnızca etkinlik
+       adında) uygulanır; döneme değen her etkinlik girer (sınırı
        aşan çok günlükler dahil). `idler` verilirse (pencerede aramayla
        eşleşip işaretli bırakılanlar) arama yerine yalnızca o kayıtlar girer. */
     if (url.pathname === '/api/rapor' && req.method === 'GET') {
@@ -243,7 +243,7 @@ const server = createServer(async (req, res) => {
         if (!/^\d{1,9}(,\d{1,9}){0,499}$/.test(ids)) return send(res, 400, { error: 'Geçersiz etkinlik seçimi.' });
         const list = ids.split(',').map(Number);
         clauses.push(`id IN (${list.map(() => '?').join(',')})`); params.push(...list);
-      } else if (filters.search) { const search = searchSql(filters.search); clauses.push(search.clause); params.push(...search.params); }
+      } else if (filters.search) { const search = searchSql(filters.search, ['title']); clauses.push(search.clause); params.push(...search.params); }
       const rows = await liveEvents(['start<?', '"end">?', ...clauses].join(' AND '), [next + 'T00:00', from + 'T00:00', ...params]);
       if (format === 'zip') {
         const entries = await photoArchive(rows);
