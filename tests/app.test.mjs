@@ -78,9 +78,11 @@ test('T.C. kimlik numarası', () => {
 });
 
 test('etkinlik doğrulama', () => {
+  /* Merkez yöneticisinin girdiği etkinliğin düzenleyeni YEĞİTEK'tir. */
   const event = validateEvent(sample, merkez);
-  assert.equal(event.city, 'Ankara');
-  assert.equal(event.cities, '|Ankara|');
+  assert.equal(event.city, 'YEĞİTEK, Ankara');
+  assert.equal(event.cities, '|YEĞİTEK|Ankara|');
+  assert.equal(event.participants, '');
   assert.equal(event.subtypes, '|Diğer|');
   assert.equal(event.work_groups, '|Yapay Zekâ|');
   assert.equal(event.theme, 'Yapay Zekâ');
@@ -109,15 +111,19 @@ test('etkinlik doğrulama', () => {
   assert.throws(() => validateEvent({ ...sample, location: '' }, merkez), ValidationError, 'yüz yüzede yer zorunlu');
   assert.equal(validateEvent({ ...sample, online: true, location: 'yok sayılır' }, merkez).location, '');
   assert.throws(() => validateEvent({ ...sample, start: '2026-01-01T09:00', end: '2030-01-01T09:00' }, merkez), ValidationError, 'süre sınırı');
-  const joint = validateEvent(ortak, merkez);
+  const joint = validateEvent(ortak, merkez, 'İzmir');
   assert.equal(joint.city, 'İzmir, Manisa');
-  assert.equal(joint.cities, '|İzmir|Manisa|');
-  assert.throws(() => validateEvent({ ...ortak, cities: [] }, merkez), ValidationError, 'bölgesel / yerel etkinlikte en az bir il');
+  assert.equal(joint.cities, '|İzmir|Manisa|', 'kaydı girenin ili tekrarlanmaz');
+  assert.equal(validateEvent({ ...ortak, cities: [] }, merkez, 'Düzce').cities, '|Düzce|', 'ortak düzenleyen isteğe bağlı; girenin ili hep var');
+  const joined = validateEvent({ ...sample, participants: ['Van', 'Adana', 'Van'] }, merkez);
+  assert.equal(joined.participants, '|Adana|Van|', 'katılan iller sıralı ve tekil');
+  assert.equal(joined.cities, '|YEĞİTEK|Ankara|', 'katılan il düzenleyen sayılmaz');
+  assert.throws(() => validateEvent({ ...sample, participants: ['Atlantis'] }, merkez), ValidationError, 'katılan il listeden olmalı');
   assert.throws(() => validateEvent({ ...sample, scope: 'İl' }, merkez), ValidationError, 'eski kapsam kabul edilmez');
   const center = validateEvent({ ...sample, cities: ['Ankara', 'YEĞİTEK'] }, merkez);
   assert.deepEqual([center.city, center.cities], ['YEĞİTEK, Ankara', '|YEĞİTEK|Ankara|'], 'YEĞİTEK il gibi seçilir, başta durur');
   const national = validateEvent({ ...sample, scope: NATIONWIDE }, merkez);
-  assert.deepEqual([national.city, national.cities], [NATIONWIDE, '']);
+  assert.deepEqual([national.city, national.cities], [NATIONWIDE, '|YEĞİTEK|Ankara|'], 'kapsam il seçimini kısıtlamaz');
   assert.throws(() => validateEvent({ ...sample, scope: 'Türkiye geneli' }, merkez), ValidationError);
 });
 
@@ -173,16 +179,16 @@ test('tüm gün etkinliği bitişi ertesi günün 00:00ı olarak saklanır', () 
   assert.equal(event.all_day, 1);
 });
 
-test('il yöneticisi yalnızca kendi ilini içeren etkinlikleri planlar', () => {
+test('il yöneticisinin ili her zaman düzenleyenler arasındadır', () => {
   const ilYoneticisi = { city: 'İzmir' };
   assert.equal(validateEvent({ ...sample, cities: ['İzmir'] }, ilYoneticisi).city, 'İzmir');
-  assert.throws(() => validateEvent(sample, ilYoneticisi), ValidationError);
-  /* İle bağlı olmayan kapsamları il yöneticisi de açar; düzenlemesi sunucuda
-     kendi açtığı kayıtlarla sınırlanır (bkz. server.mjs, canManage). */
-  assert.equal(validateEvent({ ...sample, scope: NATIONWIDE }, ilYoneticisi).cities, '');
+  assert.equal(validateEvent(sample, ilYoneticisi).cities, '|Ankara|İzmir|', 'kendi ili kendiliğinden eklenir');
+  assert.equal(validateEvent({ ...sample, scope: NATIONWIDE, cities: [] }, ilYoneticisi).cities, '|İzmir|');
   assert.equal(validateEvent({ ...sample, scope: INTERNATIONAL }, ilYoneticisi).city, INTERNATIONAL);
   assert.equal(validateEvent(ortak, ilYoneticisi).scope, 'Bölgesel / Yerel');
-  assert.throws(() => validateEvent({ ...ortak, cities: ['Manisa', 'Aydın'] }, ilYoneticisi), ValidationError);
+  /* Başka ilin kaydını ortak düzenleyen olarak açan, kendi ilini çıkaramaz. */
+  assert.equal(validateEvent({ ...ortak, cities: ['İzmir'] }, ilYoneticisi, 'Manisa').cities, '|İzmir|Manisa|');
+  assert.throws(() => validateEvent({ ...ortak, cities: [] }, ilYoneticisi, 'Manisa'), ValidationError);
 });
 
 test('ICS çıktısı', () => {
@@ -292,7 +298,7 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
     assert.equal(records.length, 1);
     assert.equal(records[0].theme, 'Yapay Zekâ');
     assert.equal(records[0].scope, 'Bölgesel / Yerel');
-    assert.equal(records[0].cities, '|Ankara|');
+    assert.equal(records[0].cities, '|YEĞİTEK|Ankara|');
     assert.equal(records[0].students, 40);
     assert.equal(JSON.parse(records[0].partners)[0].org, 'Bilim Merkezi');
 
@@ -335,26 +341,26 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
 
     /* İl yöneticisi yetkisi */
     const ilCookie = await login('izmir', 'izmir-password-123');
-    assert.equal((await request('/api/events', 'POST', { ...sample, cities: ['Ankara'] }, ilCookie)).status, 400);
+    assert.equal((await request('/api/events', 'POST', { ...sample, participants: ['Yok'] }, ilCookie)).status, 400, 'geçersiz katılan il');
     assert.equal((await request('/api/events', 'POST', { ...sample, cities: ['İzmir'] }, ilCookie)).status, 201);
-    assert.equal((await request('/api/events', 'POST', { ...ortak, cities: ['Manisa', 'Aydın'] }, ilCookie)).status, 400, 'kendi ilini içermeyen ortak etkinlik reddedilir');
-    assert.equal((await request('/api/events', 'POST', ortak, ilCookie)).status, 201, 'kendi ilini içeren ortak etkinlik açılır');
-    /* İle bağlı olmayan kapsam: il yöneticisi açar, kendi kaydını düzenler,
-       başkasının açtığına dokunamaz. */
-    const ulusal = await request('/api/events', 'POST', { ...sample, scope: 'Ulusal', work_groups: [] }, ilCookie);
+    assert.equal((await request('/api/events', 'POST', ortak, ilCookie)).status, 201, 'ortak düzenleyenli etkinlik açılır');
+    /* İle bağlı olmayan kapsam: il yöneticisi açar, kendi kaydını düzenler;
+       ilinin düzenlemediği kayda dokunamaz. */
+    const ulusal = await request('/api/events', 'POST', { ...sample, scope: 'Ulusal', cities: [], work_groups: [] }, ilCookie);
     assert.equal(ulusal.status, 201, 'il yöneticisi ulusal etkinlik açabilir');
     const ulusalBody = await ulusal.json();
-    assert.equal((await request('/api/events/' + ulusalBody.id, 'PUT', { ...sample, scope: 'Ulusal', work_groups: [], updated: ulusalBody.updated }, ilCookie)).status, 200, 'kendi ulusal kaydını düzenler');
-    const merkezUlusal = await (await request('/api/events', 'POST', { ...sample, scope: 'Ulusal', work_groups: [] }, cookie)).json();
-    assert.equal((await request('/api/events/' + merkezUlusal.id, 'PUT', { ...sample, scope: 'Ulusal', work_groups: [], updated: merkezUlusal.updated }, ilCookie)).status, 403, 'başkasının ulusal kaydına dokunamaz');
+    assert.equal((await request('/api/events/' + ulusalBody.id, 'PUT', { ...sample, scope: 'Ulusal', cities: [], work_groups: [], updated: ulusalBody.updated }, ilCookie)).status, 200, 'kendi ulusal kaydını düzenler');
+    const merkezUlusal = await (await request('/api/events', 'POST', { ...sample, scope: 'Ulusal', cities: [], work_groups: [], participants: ['İzmir'] }, cookie)).json();
+    assert.equal((await request('/api/events/' + merkezUlusal.id, 'PUT', { ...sample, scope: 'Ulusal', cities: ['İzmir'], work_groups: [], updated: merkezUlusal.updated }, ilCookie)).status, 403, 'yalnızca katılan il olmak düzenleme yetkisi vermez');
     assert.equal((await (await request('/api/events?tum=1', 'GET', null, cookie)).json()).length, 5, 'sayaçlar için tüm kayıtlar');
 
-    /* Abonelik akışı: ortak il etkinliği her ilinin akışında görünür */
+    /* Abonelik akışı: il, düzenlediği ve katıldığı etkinlikleri görür
+       (İzmir: düzenlediği 4 kayıt + katıldığı merkez ulusal kaydı). */
     const feed = await request('/takvim.ics?il=' + encodeURIComponent('İzmir'));
     assert.equal(feed.status, 200);
     assert.match(feed.headers.get('content-type'), /text\/calendar/);
     const feedText = await feed.text();
-    assert.equal(feedText.match(/BEGIN:VEVENT/g).length, 3);
+    assert.equal(feedText.match(/BEGIN:VEVENT/g).length, 5);
     assert.equal((await (await request('/takvim.ics?il=Manisa')).text()).match(/BEGIN:VEVENT/g).length, 1);
     assert.equal((await (await request('/takvim.ics?tema=' + encodeURIComponent('Yapay Zekâ'))).text()).match(/BEGIN:VEVENT/g).length, 3);
     assert.equal((await request('/takvim.ics?tema=Genel')).status, 400);

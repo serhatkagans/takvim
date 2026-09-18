@@ -35,7 +35,7 @@ const SESSION_HOURS = 8;
 const OWNER_FIELDS = `,(SELECT u.first_name FROM users u WHERE u.id = events.owner) AS owner_first`
   + `,(SELECT u.last_name FROM users u WHERE u.id = events.owner) AS owner_last`
   + `,(SELECT u.city FROM users u WHERE u.id = events.owner) AS owner_city`;
-const FIELDS = 'id,title,scope,city,cities,category,subtypes,work_groups,theme,start,"end",all_day,online,location,purpose,description,status,students,teachers,others,partners,owner,updated' + OWNER_FIELDS;
+const FIELDS = 'id,title,scope,city,cities,participants,category,subtypes,work_groups,theme,start,"end",all_day,online,location,purpose,description,status,students,teachers,others,partners,owner,updated' + OWNER_FIELDS;
 
 const attempts = new Map();
 const digest = token => createHash('sha256').update(token).digest('hex');
@@ -155,10 +155,10 @@ function tooManyAttempts(keys) {
   return false;
 }
 
-/* İl yöneticisi kendi ilini İÇEREN etkinlikleri yönetir — kaydı kimin açtığına
-   bakılmaz: koordinatör değişince ilin eski kayıtları sahipsiz kalmasın. İle
-   bağlı olmayan (ulusal / uluslararası) kayıtta ise yalnızca kendi açtığını
-   yönetebilir; merkez yöneticisi hepsini yönetir. */
+/* İl yöneticisi kendi ilinin DÜZENLEYENLER arasında olduğu etkinlikleri yönetir
+   — kaydı kimin açtığına bakılmaz: koordinatör değişince ilin eski kayıtları
+   sahipsiz kalmasın. Yalnızca katılan il olmak yetki vermez. Düzenleyen ili
+   olmayan eski kayıtta kendi açtığını yönetir; merkez yöneticisi hepsini. */
 const canManage = (user, event) => !user.city
   || (listOf(event.cities).length ? listOf(event.cities).includes(user.city) : event.owner === user.id);
 
@@ -383,18 +383,20 @@ const server = createServer(async (req, res) => {
       }
       const data = await body(req);
       if (id && typeof data.updated !== 'string') throw new ValidationError('Sürüm bilgisi eksik; sayfayı yenileyin.');
-      const e = validateEvent(data, user);
-      const values = [e.title, e.scope, e.city, e.cities, e.category, e.subtypes, e.work_groups, e.theme, e.start, e.end, e.all_day, e.online, e.location, e.purpose, e.description, e.status, e.students, e.teachers, e.others, e.partners];
+      /* Düzenleyen iller hep kaydı girenin ilini içerir; admin düzenlese de. */
+      const owner = id ? await db.get('SELECT city FROM users WHERE id=?', [previous.owner]) : user;
+      const e = validateEvent(data, user, owner?.city || CENTER);
+      const values = [e.title, e.scope, e.city, e.cities, e.participants, e.category, e.subtypes, e.work_groups, e.theme, e.start, e.end, e.all_day, e.online, e.location, e.purpose, e.description, e.status, e.students, e.teachers, e.others, e.partners];
       if (id) {
         /* Eşzamanlı düzenleme denetimi: istemci okuduğu sürümü geri gönderir,
            arada başkası kaydettiyse değişiklik sessizce ezilmez. Sürüm koşulu
            UPDATE'in içinde: ayrı bir okuma-sonra-yazma, iki eşzamanlı istekte
            ikisini de geçirirdi. */
-        const changed = await db.run('UPDATE events SET title=?,scope=?,city=?,cities=?,category=?,subtypes=?,work_groups=?,theme=?,start=?,"end"=?,all_day=?,online=?,location=?,purpose=?,description=?,status=?,students=?,teachers=?,others=?,partners=?,updated=?,updated_by=? WHERE id=? AND updated=? AND deleted_at IS NULL', [...values, now, user.id, id, data.updated]);
+        const changed = await db.run('UPDATE events SET title=?,scope=?,city=?,cities=?,participants=?,category=?,subtypes=?,work_groups=?,theme=?,start=?,"end"=?,all_day=?,online=?,location=?,purpose=?,description=?,status=?,students=?,teachers=?,others=?,partners=?,updated=?,updated_by=? WHERE id=? AND updated=? AND deleted_at IS NULL', [...values, now, user.id, id, data.updated]);
         if (!changed) return send(res, 409, { error: 'Bu etkinliği siz açtıktan sonra başka bir yönetici güncelledi. Sayfayı yenileyip değişikliğinizi tekrar girin.' });
         return send(res, 200, { id, updated: now });
       }
-      const row = await db.get('INSERT INTO events(title,scope,city,cities,category,subtypes,work_groups,theme,start,"end",all_day,online,location,purpose,description,status,students,teachers,others,partners,owner,updated,updated_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id', [...values, user.id, now, user.id]);
+      const row = await db.get('INSERT INTO events(title,scope,city,cities,participants,category,subtypes,work_groups,theme,start,"end",all_day,online,location,purpose,description,status,students,teachers,others,partners,owner,updated,updated_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id', [...values, user.id, now, user.id]);
       return send(res, 201, { id: Number(row.id), updated: now });
     }
 

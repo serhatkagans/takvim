@@ -158,8 +158,10 @@ aside input:focus, aside select:focus { border-color: var(--color-brand); box-sh
 .day-more { border: 0; background: none; padding: 2px 4px; text-align: left; color: var(--color-brand); font-size: .72rem; font-weight: 700; cursor: pointer }
 .day-more:hover { text-decoration: underline }
 .stat-more { display: block; margin-top: 8px; padding: 4px 0; font-size: .8rem }
-.search-results { border-top: 1px solid var(--color-border) }
-.search-results h3 { margin: 0; padding: 18px 24px 6px; font-size: 1rem; color: var(--color-text-strong) }
+/* Arama sonuçları yan panelde, kart listeleri gibi; uzun liste kendi içinde kayar. */
+.search-results { max-height: 60vh; overflow-y: auto }
+.search-results > p { margin: 4px 0 0; font-weight: 600; color: var(--color-text-strong) }
+.search-results .stat-events { margin-top: 6px }
 .view-toggle button[aria-pressed="true"] { background: var(--color-text-strong); border-color: var(--color-text-strong); color: #fff }
 #status { margin: 0; padding: 0 24px; color: var(--color-text-muted); font-size: .85rem }
 #status:not(:empty) { padding: 14px 24px; color: var(--color-danger) }
@@ -232,10 +234,13 @@ dialog label.choice-card:hover { border-color: var(--color-brand) }
 dialog label.choice-card:has(input:checked) { border-color: var(--color-brand); background: var(--color-bg-brand-tint); box-shadow: 0 0 0 1px var(--color-brand) }
 dialog label.choice-card:has(input:disabled) { opacity: .5; cursor: not-allowed }
 .check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 2px 12px }
+.city-pickers { display: grid; gap: 10px }
+/* Kapsam kartlarıyla aynı genişlik: üç sütunluk ızgarada iki kart. */
+.city-toggles { grid-template-columns: repeat(3, minmax(0, 1fr)) }
 .check-scroll { max-height: 220px; overflow-y: auto; border: 1px solid var(--color-border); border-radius: 8px; padding: 8px 10px }
 dialog .check-grid label { display: flex; align-items: center; gap: 8px; font-weight: 400; font-size: .85rem; padding: 3px 0 }
 dialog .check-grid label.is-passive { color: var(--color-text-muted); cursor: not-allowed }
-dialog .choice input[type="radio"], dialog .choice input[type="checkbox"] { width: auto; min-height: auto; margin: 0; accent-color: var(--color-brand) }
+dialog .choice input[type="radio"], dialog .choice input[type="checkbox"], dialog .city-toggles input[type="checkbox"] { width: auto; min-height: auto; margin: 0; accent-color: var(--color-brand) }
 .error:empty { display: none }
 .error { margin: 0; padding: 12px 14px; border: 1px solid var(--color-danger); border-radius: 8px; background: color-mix(in srgb, var(--color-danger) 8%, var(--color-surface)); color: var(--color-danger); font-size: .88rem }
 .detail-list { display: grid; gap: 10px; margin: 0 0 18px; padding: 16px; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-bg-subtle); font-size: .9rem }

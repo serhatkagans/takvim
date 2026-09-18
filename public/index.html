@@ -56,22 +56,16 @@
 
   <section class="container workspace" aria-label="Etkinlik takvimi">
     <aside>
-      <p class="eyebrow">Takvimi süz</p>
       <label for="search">Etkinlik ara</label>
       <input id="search" type="search" placeholder="Örn. Tek Maraton — tüm tarihlerde arar" maxlength="100">
-      <label for="city">Kapsam / il</label>
-      <select id="city"></select>
-      <label for="theme">Çalışma grubu</label>
-      <select id="theme"></select>
-      <label for="subtype" id="subtype-label">Etkinlik türü</label>
-      <select id="subtype"></select>
-      <label for="event-status">Etkinlik durumu</label>
-      <select id="event-status"></select>
-      <button id="clear" class="text-link">Filtreleri temizle ↗</button>
+      <section id="search-results" class="search-results" hidden aria-live="polite">
+        <p id="search-title"></p>
+        <div id="search-list" class="stat-events"></div>
+      </section>
 
       <div class="aside-note">
         <p class="eyebrow">Takvimine ekle</p>
-        <p>Seçtiğin süzgeçlerle oluşan programı Google Takvim, Outlook veya telefonundaki takvime abone olarak ekleyebilirsin. Program değiştikçe takvimin kendiliğinden güncellenir.</p>
+        <p>Takvimin üstünde seçtiğin kapsam / ilin programını Google Takvim, Outlook veya telefonundaki takvime abone olarak ekleyebilirsin. Program değiştikçe takvimin kendiliğinden güncellenir.</p>
         <input id="feed-url" readonly aria-label="Abonelik adresi">
         <div class="aside-actions">
           <button id="feed-copy" class="button button-primary">Adresi kopyala</button>
@@ -117,10 +111,6 @@
       <p id="status" role="status"></p>
       <div id="calendar"></div>
       <div id="agenda" hidden></div>
-      <section id="search-results" class="search-results" hidden aria-live="polite">
-        <h3 id="search-title"></h3>
-        <div id="search-list"></div>
-      </section>
       <div class="calendar-footer"><span class="legend"><span><i class="today-key"></i> Bugün</span><span><i class="status-key is-planlandi"></i> Planlandı</span><span><i class="status-key"></i> Tamamlandı</span><span><i class="status-key is-ertelendi"></i> Ertelendi</span></span><span id="count"></span></div>
     </div>
   </section>
@@ -212,7 +202,7 @@
 <dialog id="report-dialog">
   <form id="report-form">
     <div class="dialog-top"><h2>Faaliyet raporu</h2><button type="button" class="close" data-close aria-label="Kapat">×</button></div>
-    <p>Seçtiğiniz dönemdeki etkinlikler, seçtiğiniz il ve soldaki süzgeçler (çalışma grubu, tür, durum) uygulanarak indirilir.</p>
+    <p>Seçtiğiniz dönemdeki etkinlikler, seçtiğiniz kapsam / ile göre indirilir.</p>
     <div class="form-row">
       <label>Başlangıç tarihi<input name="from" type="date" min="2000-01-01" max="2099-12-31" required></label>
       <label>Bitiş tarihi<input name="to" type="date" min="2000-01-01" max="2099-12-31" required></label>
@@ -244,11 +234,23 @@
       <legend>Kapsam</legend>
       <div class="choice-cards" id="scope-cards"></div>
     </fieldset>
-    <fieldset class="choice" id="cities-field" hidden>
-      <legend>İller <small id="cities-count"></small></legend>
-      <input id="cities-search" type="search" placeholder="İl ara…" aria-label="İllerde ara">
-      <div class="check-grid check-scroll" id="city-checks"></div>
-    </fieldset>
+    <!-- Kaydı girenin ili zaten düzenleyendir; aşağıdakiler yalnızca gerekirse açılır. -->
+    <div class="city-pickers">
+      <div class="choice-cards city-toggles">
+        <label class="choice-card"><input type="checkbox" id="cities-toggle" data-picker="cities"> <span>Ortak düzenleyen iller</span></label>
+        <label class="choice-card"><input type="checkbox" id="participants-toggle" data-picker="participants"> <span>Katılan iller</span></label>
+      </div>
+      <fieldset class="choice" id="cities-field" hidden>
+        <legend>Ortak düzenleyen iller <small id="cities-count"></small></legend>
+        <input id="cities-search" type="search" data-search="city-checks" placeholder="İl ara…" aria-label="Ortak düzenleyen illerde ara">
+        <div class="check-grid check-scroll" id="city-checks"></div>
+      </fieldset>
+      <fieldset class="choice" id="participants-field" hidden>
+        <legend>Katılan iller <small id="participants-count"></small></legend>
+        <input id="participants-search" type="search" data-search="participant-checks" placeholder="İl ara…" aria-label="Katılan illerde ara">
+        <div class="check-grid check-scroll" id="participant-checks"></div>
+      </fieldset>
+    </div>
     <fieldset class="choice" id="groups-field">
       <legend>İlgili olduğu çalışma grubu varsa işaretleyin <small>birden fazla seçilebilir</small></legend>
       <div class="check-grid" id="group-checks"></div>
@@ -303,6 +305,8 @@
   <dl class="detail-list">
     <div><dt>Tarih</dt><dd id="detail-time"></dd></div>
     <div><dt>Kapsam</dt><dd id="detail-scope"></dd></div>
+    <div><dt>Düzenleyen iller</dt><dd id="detail-cities"></dd></div>
+    <div id="detail-participants-row"><dt>Katılan iller</dt><dd id="detail-participants"></dd></div>
     <div><dt>Yer</dt><dd id="detail-place"></dd></div>
     <div id="detail-sub-row"><dt>Etkinlik türleri</dt><dd id="detail-subtypes"></dd></div>
     <div id="detail-groups-row"><dt>Çalışma grubu</dt><dd id="detail-groups"></dd></div>
