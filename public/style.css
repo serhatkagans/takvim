@@ -96,6 +96,7 @@ p { margin-top: 0 }
 .stat-pill:hover { border-color: var(--color-brand); color: var(--color-brand) }
 .stat-pill[aria-pressed="true"] { background: var(--color-brand); border-color: var(--color-brand); color: #fff }
 .stat-pill[aria-pressed="true"] b { color: #fff }
+.stat-pill.is-static, .stat-pill.is-static:hover { cursor: default; border-color: var(--color-border-strong); color: inherit }
 .partner-list { display: grid; gap: 10px }
 .partner-item { padding-bottom: 10px; border-bottom: 1px solid var(--color-border) }
 .partner-item:last-child { border-bottom: 0; padding-bottom: 0 }

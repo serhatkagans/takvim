@@ -32,6 +32,9 @@ const MAX_PHOTOS = 7, MAX_PHOTO_MB = 15, MAX_PARTNERS = 20, MAX_DAY_EVENTS = 3;
 const MAX_STAT_EVENTS = 10;
 /* Dökümde "devamını göster" ile açılmış listeler; kart değişince sıfırlanır. */
 const expandedLists = new Set();
+/* Kart ovallerinde seçili değer (kart → değer). Soldaki süzgeci değiştirmez:
+   sayılar ve takvim aynı kalır, yalnızca altta o değerin etkinlikleri açılır. */
+const pickedPills = new Map();
 /* Kenar çubuğundaki süzgeç kutuları; "Filtreleri temizle" hepsini boşaltır. */
 /* Durum kutusunun kimliği '#event-status': '#status' sayfadaki durum mesajı satırıdır. */
 const FILTERS = ['#search', '#city', '#theme', '#subtype', '#event-status'];
@@ -92,12 +95,9 @@ async function reload() {
 }
 
 /** Kayıtların kenar çubuğu süzgeçlerine ve arama metnine göre süzülmesi.
-    Birden çok ile bağlı etkinlik her ilinde, çok gruplu etkinlik her grubunda görünür.
-    `skip` verilen süzgeç kutusu (ör. '#subtype') yok sayılır: sayaç dökümü
-    kendi süzgecini uygulamadan hesaplanır, böylece bir değer seçilince
-    diğerleri listeden kaybolmaz. */
-function filtered(source = events, skip = '') {
-  const value = id => (id === skip ? '' : $(id).value);
+    Birden çok ile bağlı etkinlik her ilinde, çok gruplu etkinlik her grubunda görünür. */
+function filtered(source = events) {
+  const value = id => $(id).value;
   const query = $('#search').value.toLocaleLowerCase('tr-TR'), place = value('#city'), theme = value('#theme'), sub = value('#subtype'), state = value('#event-status');
   /* "Yalnızca benim eklediklerim": kutu yalnızca il yöneticisinde görünür,
      `owner` alanı da yalnızca giriş yapmış kullanıcıya gönderilir. */
@@ -127,15 +127,15 @@ function inMonth(event) {
 const inRange = event => event.start < shiftDay(rangeTo, 1) + 'T00:00' && event.end > rangeFrom + 'T00:00';
 
 /** Görüntülenen dönemin (ay ya da tarih aralığı) süzgeçten geçmiş etkinlikleri. */
-const shownEvents = (skip = '') => (rangeOn() ? filtered(allEvents, skip).filter(inRange) : filtered(events, skip).filter(inMonth));
+const shownEvents = () => (rangeOn() ? filtered(allEvents).filter(inRange) : filtered(events).filter(inMonth));
 
 /** Sayaç dönemleri: program yılları 1 Eylül – 31 Ağustos. */
 const PROGRAM_YEARS = [1, 2, 3].map(n => ({ label: `${n}. Yıl`, from: `${2023 + n}-09-01`, to: `${2024 + n}-09-01` }));
 const inYear = ({ from, to }) => e => e.start < to + 'T00:00' && e.end > from + 'T00:00';
 /** Sayaçların kümesi: tümü, görüntülenen ay / aralık ya da seçili program yılı. */
-function periodEvents(skip = '') {
-  if (period === 'month') return shownEvents(skip);
-  return period === null ? filtered(allEvents, skip) : filtered(allEvents, skip).filter(inYear(PROGRAM_YEARS[period]));
+function periodEvents() {
+  if (period === 'month') return shownEvents();
+  return period === null ? filtered(allEvents) : filtered(allEvents).filter(inYear(PROGRAM_YEARS[period]));
 }
 
 /** Aralığın değdiği ayların ilk günleri; çok uzun aralıklar kırpılır. */
@@ -260,23 +260,39 @@ const resultItem = (e, note) => `<button class="agenda-item ${statusClass(e.stat
     Birden çok ile / çalışma grubuna bağlı etkinlik her birinde ayrıca sayılır. */
 const groupsOf = e => listOf(e.work_groups);
 const placesOf = e => (e.cities ? listOf(e.cities) : [e.scope]);
+/** Paydaşın sayılan / gruplanan adı: kurum, kurum yoksa kişi. */
+const partnerName = p => p.org || p.person;
+/** Karşılaştırma anahtarı: büyük / küçük harf (Türkçe kurallarıyla) ve boşluk farkı yok sayılır. */
+const nameKey = name => name.replace(/\s+/g, ' ').trim().toLocaleLowerCase('tr-TR');
+
+/** Aynı anahtarlı adlardan en sık yazılanı (eşitlikte ilk görüleni) gösterilir.
+    Dönen Map: anahtar → gösterilecek ad. */
+function spellings(names) {
+  const counts = new Map();
+  for (const name of names) {
+    const key = nameKey(name), byName = counts.get(key) || new Map();
+    byName.set(name, (byName.get(name) || 0) + 1);
+    counts.set(key, byName);
+  }
+  return new Map([...counts].map(([key, byName]) => [key, [...byName].sort((a, b) => b[1] - a[1])[0][0]]));
+}
 const statFilters = {
   /* `all`: hiç etkinliği olmayan türler de listelenir (0 adetle). */
   /* `showAll`: kartın ana listesi kısaltılmaz, "Devamını göster" çıkmaz.
      `first`: bu değer (YEĞİTEK, il değil) sayısından bağımsız en başta durur. */
-  done: { select: '#subtype', label: 'Tamamlanan etkinlikler, türlerine göre', subset: e => e.status === 'Tamamlandı', values: e => listOf(e.subtypes), all: eventTypes, showAll: true },
-  upcoming: { select: '#subtype', label: 'Planlanan ve ertelenen etkinlikler, türlerine göre', subset: e => e.status === 'Planlandı' || e.status === 'Ertelendi', values: e => listOf(e.subtypes), all: eventTypes },
-  /* Etkinliğin yapıldığı il değil, kaydı giren hesabın yetki alanı sayılır. */
-  cities: { select: '#city', label: 'Etkinliği giren ile göre etkinlikler', values: e => [ownerCity(e)], distinct: true, showAll: true, first: ownerCity({}) },
-  themes: { select: '#theme', label: 'Çalışma grupları', values: groupsOf, all: () => meta.groups, distinct: true, showAll: true },
+  done: { subset: e => e.status === 'Tamamlandı', values: e => listOf(e.subtypes), all: eventTypes, showAll: true },
+  upcoming: { subset: e => e.status === 'Planlandı' || e.status === 'Ertelendi', values: e => listOf(e.subtypes), all: eventTypes },
+  /* Etkinlik seçilen her ilde (il yoksa kapsamında: Ulusal / Uluslararası) sayılır. */
+  cities: { values: placesOf, distinct: true, showAll: true, first: ownerCity({}) },
+  themes: { values: groupsOf, all: () => meta.groups, distinct: true, showAll: true },
   /* `byEvent`: il yerine her etkinliğin kendi katılımcı sayısı; tıklamak etkinliği açar. */
-  students: { select: '#city', label: 'Etkinliklere göre katılan öğrenci sayısı', values: placesOf, weight: e => e.students || 0, byEvent: true },
-  teachers: { select: '#city', label: 'Etkinliklere göre katılan öğretmen sayısı', values: placesOf, weight: e => e.teachers || 0, byEvent: true },
+  students: { values: placesOf, weight: e => e.students || 0, byEvent: true },
+  teachers: { values: placesOf, weight: e => e.teachers || 0, byEvent: true },
   /* `byPartner`: her paydaş kurum (kurum adı yoksa kişi) ve katıldığı etkinlikler. */
-  stakeholders: { select: '#city', label: 'Paydaş / işbirliği yapılan kurumlar ve katıldıkları etkinlikler', values: placesOf, weight: e => partnersOf(e).length, byPartner: true },
+  stakeholders: { values: e => partnersOf(e).map(p => nameKey(partnerName(p))), distinct: true, byPartner: true },
 };
 
-/** Kartın büyük sayısı: farklı il / grup adedi, kişi / paydaş toplamı ya da etkinlik adedi. */
+/** Kartın büyük sayısı: farklı il / grup / paydaş adedi, kişi toplamı ya da etkinlik adedi. */
 function statTotal(stat, list) {
   if (stat.distinct) return new Set(list.flatMap(stat.values)).size;
   if (stat.weight) return list.reduce((total, e) => total + stat.weight(e), 0).toLocaleString('tr-TR');
@@ -295,7 +311,7 @@ function limited(key, items, draw, all = false) {
 }
 
 /** Başlık (paydaş kurum) altında o başlığa ait etkinlikler; en kalabalık başlık başta. */
-function groupedEvents(label, rows, empty) {
+function groupedEvents(rows, empty) {
   rows.sort((a, b) => b[1].size - a[1].size || a[0].localeCompare(b[0], 'tr'));
   const pill = e => `<button type="button" class="stat-pill" data-event="${e.id}">${escapeHtml(e.title)} <b>${escapeHtml(e.start.slice(8, 10) + '.' + e.start.slice(5, 7) + '.' + e.start.slice(0, 4))}</b></button>`;
   const item = ([name, joined, note]) => {
@@ -305,51 +321,41 @@ function groupedEvents(label, rows, empty) {
       + ` <small>· ${joined.size} etkinlik</small><div class="stat-pills">${inner.html}</div>${inner.more}</div>`;
   };
   const outer = limited(openStat, rows, item, statFilters[openStat].showAll);
-  return `<p>${label} · etkinliğe tıklayarak ayrıntıyı açın</p>`
-    + (rows.length ? `<div class="partner-list">${outer.html}</div>${outer.more}` : `<p>${empty}</p>`);
+  return (rows.length ? `<div class="partner-list">${outer.html}</div>${outer.more}` : `<p>${empty}</p>`);
 }
 
 const pillButton = (value, count, active) =>
   `<button type="button" class="stat-pill" data-filter="${openStat}" data-value="${escapeHtml(value)}" aria-pressed="${value === active}">${escapeHtml(value)} <b>${count.toLocaleString('tr-TR')}</b></button>`;
-
-/** Öğrenci / öğretmen / paydaş kartının il düğmeleri: her ilin toplamı, en kalabalığı başta. */
-function placePills(list, values, weight, active) {
-  const counts = new Map();
-  for (const e of list) if (weight(e) > 0) for (const value of values(e)) counts.set(value, (counts.get(value) || 0) + weight(e));
-  const rows = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'tr'));
-  if (!rows.length) return '';
-  return `<p>İllere göre${active ? ' · seçimi kaldırmak için tekrar tıklayın' : ' · süzmek için tıklayın'}</p>`
-    + `<div class="stat-pills">${rows.map(([value, count]) => pillButton(value, count, active)).join('')}</div>`;
-}
 
 function renderBreakdown() {
   for (const button of document.querySelectorAll('[data-stat]')) button.setAttribute('aria-expanded', String(button.dataset.stat === openStat));
   const box = $('#stat-breakdown');
   box.hidden = !openStat;
   if (!openStat) return;
-  const { select, label, subset = () => true, values, weight, all, byEvent, byPartner, showAll, first } = statFilters[openStat];
-  const list = periodEvents(select).filter(subset);
-  const active = $(select).value;
-  /* Kişi / paydaş kartlarında il düğmeleri; seçilen ilin etkinlikleri altta. */
-  const inPlace = e => !active || values(e).includes(active);
+  const { subset = () => true, values, weight, all, byEvent, byPartner, showAll, first } = statFilters[openStat];
+  const list = periodEvents().filter(subset);
+  const active = pickedPills.get(openStat) || '';
   if (byPartner) {
+    const entries = list.flatMap(partnersOf), names = spellings(entries.map(partnerName)), people = spellings(entries.map(p => p.person).filter(Boolean));
     const partners = new Map();
-    for (const e of list.filter(inPlace)) for (const p of partnersOf(e)) {
-      const name = p.org || p.person, entry = partners.get(name) || { events: new Set(), people: new Set() };
+    for (const e of list) for (const p of partnersOf(e)) {
+      const key = nameKey(partnerName(p)), entry = partners.get(key) || { events: new Set(), people: new Set() };
       entry.events.add(e);
-      if (p.org && p.person) entry.people.add(p.person);
-      partners.set(name, entry);
+      if (p.org && p.person) entry.people.add(people.get(nameKey(p.person)));
+      partners.set(key, entry);
     }
-    box.innerHTML = placePills(list, values, weight, active)
-      + groupedEvents(label, [...partners].map(([name, { events: joined, people }]) => [name, joined, [...people].join(', ')]), 'Gösterilecek paydaş yok.');
+    /* Özet ovaller: farklı kurum ve farklı kişi sayısı (kurumsuz kişiler de sayılır). */
+    const orgs = new Set(entries.map(p => p.org).filter(Boolean).map(nameKey));
+    box.innerHTML = `<div class="stat-pills"><span class="stat-pill is-static">Kurum <b>${orgs.size.toLocaleString('tr-TR')}</b></span>`
+      + `<span class="stat-pill is-static">Kişi <b>${people.size.toLocaleString('tr-TR')}</b></span></div>`
+      + groupedEvents([...partners].map(([key, { events: joined, people: named }]) => [names.get(key), joined, [...named].join(', ')]), 'Gösterilecek paydaş yok.');
     return;
   }
   if (byEvent) {
-    const rows = list.filter(e => weight(e) > 0 && inPlace(e)).sort((a, b) => weight(b) - weight(a) || b.start.localeCompare(a.start));
+    const rows = list.filter(e => weight(e) > 0).sort((a, b) => weight(b) - weight(a) || b.start.localeCompare(a.start));
     const unit = openStat === 'teachers' ? 'öğretmen' : 'öğrenci';
     const shown = limited(openStat, rows, e => resultItem(e, `${weight(e).toLocaleString('tr-TR')} ${unit}`));
-    box.innerHTML = placePills(list, values, weight, active) + `<p>${label} · ayrıntı için tıklayın</p>`
-      + `<div class="stat-events">${rows.length ? shown.html : '<div class="empty">Gösterilecek etkinlik yok.</div>'}</div>${shown.more}`;
+    box.innerHTML = `<div class="stat-events">${rows.length ? shown.html : '<div class="empty">Gösterilecek etkinlik yok.</div>'}</div>${shown.more}`;
     return;
   }
   const counts = new Map(all ? all().map(value => [value, 0]) : []);
@@ -362,8 +368,7 @@ function renderBreakdown() {
   const pills = limited(openStat, hidden ? [...rows.filter(([value]) => value === active), ...rows.filter(([value]) => value !== active)] : rows,
     ([value, count]) => pillButton(value, count, active), showAll);
   const events = limited(`${openStat}:${active}`, chosen, e => resultItem(e), openStat === 'done');
-  box.innerHTML = `<p>${label}${active ? ' · seçimi kaldırmak için tekrar tıklayın' : ' · süzmek için tıklayın'}</p>`
-    + (rows.length ? `<div class="stat-pills">${pills.html}</div>${pills.more}` : '<p>Gösterilecek etkinlik yok.</p>')
+  box.innerHTML = (rows.length ? `<div class="stat-pills">${pills.html}</div>${pills.more}` : '<p>Gösterilecek etkinlik yok.</p>')
     + (active
       ? `<div class="stat-events"><p>${escapeHtml(active)} · ${chosen.length} etkinlik</p>`
         + (chosen.length ? events.html : '<div class="empty">Bu seçimde etkinlik yok.</div>') + `</div>${events.more}`
@@ -388,8 +393,8 @@ document.querySelector('.hero-stats').addEventListener('click', event => {
   }
   const pill = event.target.closest('[data-filter]');
   if (!pill || !meta) return;
-  const field = $(statFilters[pill.dataset.filter].select);
-  field.value = field.value === pill.dataset.value ? '' : pill.dataset.value;
+  const { filter, value } = pill.dataset;
+  if (pickedPills.get(filter) === value) pickedPills.delete(filter); else pickedPills.set(filter, value);
   render();
 });
 
@@ -464,10 +469,20 @@ function filterCities() {
 }
 
 /* --- Paydaşlar: "+ Paydaş ekle" ile kişi – kurum satırları ---------------- */
+/** Paydaş kutularının önerileri: daha önce girilmiş kişi ve kurum adları,
+    her ad bir kez ve en sık yazıldığı biçimiyle; yazım farkları çoğalmasın. */
+function fillPartnerSuggestions() {
+  const all = allEvents.flatMap(partnersOf);
+  for (const [id, field] of [['#partner-people', 'person'], ['#partner-orgs', 'org']])
+    $(id).innerHTML = [...spellings(all.map(p => p[field]).filter(Boolean)).values()].sort((a, b) => a.localeCompare(b, 'tr'))
+      .map(name => `<option value="${escapeHtml(name)}">`).join('');
+}
+
 function addPartnerRow(partner = {}) {
+  if (!$('#partner-rows').children.length) fillPartnerSuggestions();
   const row = document.createElement('div');
   row.className = 'partner-row';
-  row.innerHTML = '<input data-partner="person" maxlength="150" placeholder="Paydaş (kişi adı)" aria-label="Paydaş kişi adı"><input data-partner="org" maxlength="150" placeholder="İşbirliği yapılan kurum" aria-label="İşbirliği yapılan kurum adı"><button type="button" data-partner-remove aria-label="Paydaşı kaldır">×</button>';
+  row.innerHTML = '<input data-partner="person" list="partner-people" maxlength="150" placeholder="Paydaş (kişi adı)" aria-label="Paydaş kişi adı" autocomplete="off"><input data-partner="org" list="partner-orgs" maxlength="150" placeholder="İşbirliği yapılan kurum" aria-label="İşbirliği yapılan kurum adı" autocomplete="off"><button type="button" data-partner-remove aria-label="Paydaşı kaldır">×</button>';
   row.querySelector('[data-partner="person"]').value = partner.person || '';
   row.querySelector('[data-partner="org"]').value = partner.org || '';
   $('#partner-rows').append(row);
