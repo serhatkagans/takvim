@@ -91,7 +91,12 @@ p { margin-top: 0 }
 .hero-stats .stat { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 12px; padding: 14px 12px; display: grid; text-align: left; box-shadow: var(--shadow-sm); cursor: pointer; transition: border-color 120ms, transform 120ms }
 .hero-stats .stat:hover { border-color: var(--color-brand); transform: translateY(-1px) }
 .hero-stats .stat[aria-expanded="true"] { border-color: var(--color-brand); box-shadow: 0 0 0 2px var(--color-brand) }
-.stat-breakdown { grid-column: 1 / -1; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 12px; padding: 12px 14px; box-shadow: var(--shadow-sm) }
+/* Kart açılırken panel 0fr→1fr ile yumuşak iner; kapanış anındır. */
+.stat-breakdown { grid-column: 1 / -1; display: grid; grid-template-rows: 1fr; transition: grid-template-rows 1000ms cubic-bezier(.22, .61, .36, 1) }
+.stat-breakdown.is-opening { grid-template-rows: 0fr }
+.stat-breakdown-body { overflow: hidden; background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 12px; padding: 12px 14px; box-shadow: var(--shadow-sm); opacity: 1; transition: opacity 1000ms ease }
+.stat-breakdown.is-opening .stat-breakdown-body { opacity: 0 }
+@media (prefers-reduced-motion: reduce) { .stat-breakdown, .stat-breakdown-body { transition: none } }
 .stat-breakdown p { margin: 0 0 8px; font-size: .8rem; color: var(--color-text-muted) }
 .stat-pills { display: flex; flex-wrap: wrap; gap: 6px }
 .stat-pill { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--color-border-strong); border-radius: 9999px; background: var(--color-surface); padding: 4px 10px; font-size: .8rem; font-weight: 600; cursor: pointer }

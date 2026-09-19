@@ -189,7 +189,7 @@ function render() {
   for (const box of document.querySelectorAll('[data-period]')) box.checked = box.dataset.period === String(period);
   /* Süzgeç yokken düğme durur ama pasiftir: kartların orada da görünsün. */
   $('#stat-clear').disabled = !anyFilter();
-  for (const [key, stat] of Object.entries(statFilters)) $('#stat-' + key).textContent = statTotal(stat, counted);
+  for (const [key, stat] of Object.entries(statFilters)) countUp($('#stat-' + key), statTotal(stat, counted));
   renderBreakdown();
   $('#report').title = 'Seçeceğiniz dönemin etkinliklerini, seçili süzgeçlerle Word veya Excel olarak indirir';
   $('#feed-url').value = feedUrl();
@@ -304,8 +304,33 @@ const statFilters = {
 /** Kartın büyük sayısı: farklı il / grup / paydaş adedi, kişi toplamı ya da etkinlik adedi. */
 function statTotal(stat, list) {
   if (stat.distinct) return new Set(list.flatMap(stat.values)).size;
-  if (stat.weight) return list.reduce((total, e) => total + stat.weight(e), 0).toLocaleString('tr-TR');
+  if (stat.weight) return list.reduce((total, e) => total + stat.weight(e), 0);
   return list.filter(stat.subset).length;
+}
+
+/* Kart sayıları sayfa açılınca 0'dan hedefe sayar; sonraki değişimlerde
+   eldeki sayıdan yenisine geçer. Hareketi kapatmış kullanıcıda anında yazar. */
+const statShown = new Map();
+const statTimers = new Map();
+const noMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function countUp(node, target) {
+  const key = node.id;
+  const first = !statShown.has(key);
+  const from = statShown.get(key) ?? 0;
+  cancelAnimationFrame(statTimers.get(key));
+  statShown.set(key, target);
+  if (!first && from === target) return;
+  if (noMotion()) return void (node.textContent = target.toLocaleString('tr-TR'));
+  const span = first ? 1000 : 420;
+  const started = performance.now();
+  const step = now => {
+    const t = Math.min(1, (now - started) / span);
+    const eased = 1 - Math.pow(1 - t, 3);
+    node.textContent = Math.round(from + (target - from) * eased).toLocaleString('tr-TR');
+    if (t < 1) statTimers.set(key, requestAnimationFrame(step));
+  };
+  statTimers.set(key, requestAnimationFrame(step));
 }
 
 /** Listenin ilk MAX_STAT_EVENTS öğesi; fazlası alttaki düğmeyle açılır / kapanır. */
@@ -336,10 +361,22 @@ function groupedEvents(rows, empty) {
 const pillButton = (value, count, active) =>
   `<button type="button" class="stat-pill" data-filter="${openStat}" data-value="${escapeHtml(value)}" aria-pressed="${value === active}">${escapeHtml(value)} <b>${count.toLocaleString('tr-TR')}</b></button>`;
 
+/* Panel yalnızca yeni açılırken iner: aynı kartın içinde oval seçmek
+   listeyi yerinde yeniler, her tıklamada yeniden açılmaz. */
+let shownStat = null;
+function openBreakdown(box) {
+  if (shownStat === openStat) return;
+  shownStat = openStat;
+  if (!openStat) return;
+  box.classList.add('is-opening');
+  requestAnimationFrame(() => requestAnimationFrame(() => box.classList.remove('is-opening')));
+}
+
 function renderBreakdown() {
   for (const button of document.querySelectorAll('[data-stat]')) button.setAttribute('aria-expanded', String(button.dataset.stat === openStat));
-  const box = $('#stat-breakdown');
-  box.hidden = !openStat;
+  const wrap = $('#stat-breakdown'), box = wrap.querySelector('.stat-breakdown-body');
+  wrap.hidden = !openStat;
+  openBreakdown(wrap);
   if (!openStat) return;
   const { subset = () => true, values, weight, all, byEvent, byPartner, showAll, first } = statFilters[openStat];
   const list = periodEvents().filter(subset);
