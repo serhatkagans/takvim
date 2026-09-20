@@ -10,6 +10,10 @@ const rangeFormat = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'l
 
 let month = new Date(nowString + 'T12:00:00'); month.setDate(1);
 let meta, events = [], allEvents = [], period = null, selected, mode = 'month', sequence = 0, openStat = null, expandedDay = null;
+/* Takvim aboneliğinin gizli anahtarı: /takvim.ics çerez taşıyamadığı için
+   kimlik adresin içindedir (bkz. lib/users.mjs icsKey). Oturum açılırken
+   bir kez alınır, "Adresi yenile" ile değiştirilir. */
+let icsKey = '';
 /* Takvim ya tek ayı ya da seçilen tarih aralığını gösterir. Aralık seçiliyken
    kaç ay sürüyorsa o kadar ay kutusu alt alta çizilir ve kayıtlar aydan aya
    istenmek yerine tümü (allEvents) üzerinden süzülür. */
@@ -57,6 +61,13 @@ const options = (values, blank = '') => (blank ? `<option value="">${escapeHtml(
 async function identity() {
   meta = await api('api/meta');
   const user = meta.user;
+  /* Abonelik anahtarı hesaba bağlıdır ve ilk istekte üretilir; takvim
+     kutusunun tamamı anahtar gelene kadar gizli kalır — yarım bir adres
+     kopyalanıp işe yaramaz bir abonelik kurulmasın. */
+  $('#feed-box').hidden = true;
+  if (user) {
+    try { icsKey = (await api('api/abonelik')).key; $('#feed-box').hidden = false; } catch { icsKey = ''; }
+  }
   $('#login-button').hidden = !!user;
   for (const id of ['#logout-button', '#password-button', '#add', '#report']) $(id).hidden = !user;
   /* Kullanıcı yönetimi yalnızca merkez yöneticisinde: il koordinatörü başka
@@ -167,8 +178,10 @@ function timeLabel(event) {
 function feedUrl() {
   const params = new URLSearchParams();
   if ($('#city-pick').value) params.set('il', $('#city-pick').value);
+  /* Anahtar zorunlu: akış oturum çerezi alamadığı için kimliği adres taşır. */
+  params.set('anahtar', icsKey);
   /* Göreli çözülür: uygulama alt dizinde (/genctektakvim/) de çalışır. */
-  return new URL('takvim.ics', location.href).href + (params.size ? '?' + params : '');
+  return new URL('takvim.ics', location.href).href + '?' + params;
 }
 
 /** Seçilebilen etkinlik türleri; tek bir `category` altında tutulur. */
@@ -483,10 +496,10 @@ function showEvent(id) {
     gallery.innerHTML = rows.map((row, i) => `<a href="api/photos/${row.id}" target="_blank" rel="noopener"><img src="api/photos/${row.id}" alt="${escapeHtml(selected.title)} — fotoğraf ${i + 1}" loading="lazy"></a>`).join('');
     gallery.hidden = !rows.length;
   }).catch(() => {});
-  $('#export').href = `takvim.ics?id=${selected.id}`;
+  $('#export').href = `takvim.ics?id=${selected.id}&anahtar=${encodeURIComponent(icsKey)}`;
   /* İl yöneticisi kendi ilini içeren etkinlikleri yönetir; yetkisi olmayan
      kayıtta düğmeler hiç görünmez (sunucu da aynı kuralı uygular). */
-  /* Sunucudaki kuralın aynısı (bkz. server.mjs, canManage): il yöneticisi
+  /* Sunucudaki kuralın aynısı (bkz. routes/etkinlik.mjs, canManage): il yöneticisi
      kendi ilini içeren kayıtları, ile bağlı olmayanlardan ise kendi açtığını yönetir. */
   const canManage = !!meta.user && (meta.user.central
     || (listOf(selected.cities).length ? listOf(selected.cities).includes(meta.user.city) : selected.owner === meta.user.id));
@@ -691,6 +704,30 @@ $('#range-clear').onclick = () => {
   rangeFrom = rangeTo = $('#range-from').value = $('#range-to').value = '';
   expandedDay = null;
   if (meta) render();
+};
+
+/* Adresi yenilemek eskisini geçersiz kılar: sızmış bir adresle kurulmuş
+   abonelikler veri almayı bırakır, ama kişinin kendi takvim uygulamasındaki
+   abonelik de kopar — bu yüzden onay isteniyor. */
+$('#feed-reset').onclick = async () => {
+  const button = $('#feed-reset');
+  if (button.dataset.confirm !== '1') {
+    button.dataset.confirm = '1';
+    button.textContent = 'Emin misiniz? Eski adres çalışmayı bırakacak — yenilemek için tekrar tıklayın';
+    setTimeout(() => { button.dataset.confirm = ''; button.textContent = 'Adresi yenile'; }, 6000);
+    return;
+  }
+  button.dataset.confirm = '';
+  button.disabled = true;
+  try {
+    icsKey = (await api('api/abonelik', { method: 'POST' })).key;
+    render();
+    button.textContent = 'Yenilendi — yeni adresi takvim uygulamanıza tekrar ekleyin';
+  } catch (error) {
+    button.textContent = error.message;
+  }
+  button.disabled = false;
+  setTimeout(() => { button.textContent = 'Adresi yenile'; }, 6000);
 };
 
 $('#feed-copy').onclick = async () => {

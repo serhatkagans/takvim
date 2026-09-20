@@ -67,14 +67,16 @@
         <div id="search-list" class="stat-events"></div>
       </section>
 
-      <div class="aside-note">
+      <div id="feed-box" class="aside-note" hidden>
         <p class="eyebrow">Takvimine ekle</p>
         <p>Takvimin üstünde seçtiğin kapsam / ilin programını Google Takvim, Outlook veya telefonundaki takvime abone olarak ekleyebilirsin. Program değiştikçe takvimin kendiliğinden güncellenir.</p>
         <input id="feed-url" readonly aria-label="Abonelik adresi">
+        <p class="hint">Bu adres sana özeldir ve parola yerine geçer: açan herkes etkinlik programını görebilir. Kimseyle paylaşma; yanlışlıkla paylaştıysan yenile.</p>
         <div class="aside-actions">
           <button id="feed-copy" class="button button-primary">Adresi kopyala</button>
-          <a id="feed-open" class="text-link" href="takvim.ics">Dosyayı indir ↗</a>
+          <a id="feed-open" class="text-link" href="#">Dosyayı indir ↗</a>
         </div>
+        <button id="feed-reset" class="text-link">Adresi yenile</button>
       </div>
     </aside>
 

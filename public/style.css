@@ -148,6 +148,9 @@ aside input:focus, aside select:focus { border-color: var(--color-brand); box-sh
 .aside-note p { font-size: .85rem; margin: 0 0 10px }
 .aside-note p:last-child { margin-bottom: 0 }
 .aside-note input { font-size: .76rem; background: var(--color-surface); margin-bottom: 10px }
+/* Abonelik adresi parola yerine geçer; uyarı adresin hemen altında durur. */
+.aside-note .hint { font-size: .78rem; color: var(--color-text-muted) }
+.aside-note #feed-reset { margin-top: 12px; font-size: .8rem; font-weight: 600 }
 .aside-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap }
 .aside-actions .button { min-height: 38px; padding: 7px 14px; font-size: .85rem }
 

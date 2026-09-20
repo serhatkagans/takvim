@@ -7,7 +7,7 @@ GençTek etkinliklerinin 81 il için planlandığı, giriş gerektiren takvim uy
 - Ay, tarih aralığı ve liste görünümü; il, çalışma grubu, tür ve durum süzgeçleri
 - Merkez ve il yöneticisi yetkileri
 - Etkinlik başına en fazla 7 fotoğraf
-- ICS takvim aboneliği (`/takvim.ics`)
+- ICS takvim aboneliği (`/takvim.ics?anahtar=…`); adres hesaba özel ve gizlidir, paneldeki "Takvimine ekle" kutusundan alınır ve yenilenebilir
 - Word, Excel ve fotoğraf arşivi (.zip) olarak faaliyet raporu
 - Formlar: merkez yöneticisi form hazırlar, il yöneticileri doldurur; yanıtlar özet, tablo ve Excel olarak (`formlar.html`)
 

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
@@ -247,6 +247,35 @@ test('yanıt doğrulama', () => {
   assert.ok(targets({ audience: '|Van|' }, 'Van') && !targets({ audience: '|Van|' }, 'İzmir'));
 });
 
+/* Sunucu koddan çekmez; yayinla.ps1'in hazırladığı arşiv neyse sunucuda o
+   çalışır (bkz. DAGITIM.md). Kaynakta yeni bir üst klasör açılıp arşiv
+   listesine eklenmezse uygulama sunucuda açılışta çöker — v2.7.0'da
+   `routes/` tam olarak böyle unutulmuştu. */
+test('yayın arşivi, kaynaktaki bütün üst klasörleri içerir', t => {
+  const root = new URL('../', import.meta.url);
+  /* `deploy/` sunucuya özeldir ve depoya girmez (.gitignore); temiz bir
+     klonda bu denetim atlanır. */
+  let script;
+  try { script = readFileSync(new URL('deploy/yayinla.ps1', root), 'utf8'); }
+  catch { return t.skip('deploy/yayinla.ps1 bu kopyada yok'); }
+  const line = script.split('\n').find(l => l.trimStart().startsWith('tar -czf'));
+  assert.ok(line, 'yayinla.ps1 içinde tar satırı bulunur');
+  const packed = new Set(line.trim().split(/\s+/).slice(3));
+
+  /* Kaynaktaki her yerel import'un hangi üst klasöre indiğine bakılır. */
+  const sources = ['server.mjs', ...readdirSync(new URL('lib/', root)).map(f => 'lib/' + f), ...readdirSync(new URL('routes/', root)).map(f => 'routes/' + f)];
+  const needed = new Set();
+  for (const file of sources.filter(f => f.endsWith('.mjs'))) {
+    const text = readFileSync(new URL(file, root), 'utf8');
+    for (const [, target] of text.matchAll(/from\s+'(\.[^']+)'/g)) {
+      const resolved = join(file, '..', target).replaceAll('\\', '/');
+      needed.add(resolved.includes('/') ? resolved.split('/')[0] : resolved);
+    }
+  }
+  needed.add('public'); /* statik dosyalar ve rapordaki logo */
+  for (const entry of needed) assert.ok(packed.has(entry), `yayinla.ps1 arşivine "${entry}" eklenmeli`);
+});
+
 test('ICS çıktısı', () => {
   const text = buildIcs([{ ...sample, subtypes: '|Diğer|', work_groups: '|Yapay Zekâ|', id: 7, updated: '2026-09-01T10:00:00.000Z', all_day: 0 }], { host: 'takvim.test' });
   assert.match(text, /BEGIN:VEVENT/);
@@ -410,18 +439,35 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
     assert.equal((await request('/api/events/' + merkezUlusal.id, 'PUT', { ...sample, scope: 'Ulusal', cities: ['İzmir'], work_groups: [], updated: merkezUlusal.updated }, ilCookie)).status, 403, 'yalnızca katılan il olmak düzenleme yetkisi vermez');
     assert.equal((await (await request('/api/events?tum=1', 'GET', null, cookie)).json()).length, 5, 'sayaçlar için tüm kayıtlar');
 
-    /* Abonelik akışı: il, düzenlediği ve katıldığı etkinlikleri görür
+    /* Abonelik akışı: gizli anahtarla açılır, çerezle değil (takvim
+       uygulamaları çerez gönderemez). Anahtarsız istek veri sızdırmaz. */
+    assert.equal((await request('/api/abonelik')).status, 401, 'anahtarı yalnızca oturum alır');
+    const { key } = await (await request('/api/abonelik', 'GET', null, cookie)).json();
+    assert.match(key, /^[0-9a-f]{64}$/);
+    assert.equal((await (await request('/api/abonelik', 'GET', null, cookie)).json()).key, key, 'anahtar kalıcıdır');
+    assert.equal((await request('/takvim.ics')).status, 401, 'anahtarsız akış kapalı');
+    assert.equal((await request('/takvim.ics?anahtar=' + 'f'.repeat(64))).status, 401, 'tanınmayan anahtar');
+    assert.equal((await request('/takvim.ics?anahtar=kisa')).status, 401, 'biçimsiz anahtar');
+
+    /* İl, düzenlediği ve katıldığı etkinlikleri görür
        (İzmir: düzenlediği 4 kayıt + katıldığı merkez ulusal kaydı). */
-    const feed = await request('/takvim.ics?il=' + encodeURIComponent('İzmir'));
+    const feed = await request('/takvim.ics?anahtar=' + key + '&il=' + encodeURIComponent('İzmir'));
     assert.equal(feed.status, 200);
     assert.match(feed.headers.get('content-type'), /text\/calendar/);
+    assert.match(feed.headers.get('cache-control'), /private/, 'sır taşıyan adres paylaşılan önbelleğe girmez');
     const feedText = await feed.text();
     assert.equal(feedText.match(/BEGIN:VEVENT/g).length, 5);
-    assert.equal((await (await request('/takvim.ics?il=Manisa')).text()).match(/BEGIN:VEVENT/g).length, 1);
-    assert.equal((await (await request('/takvim.ics?tema=' + encodeURIComponent('Yapay Zekâ'))).text()).match(/BEGIN:VEVENT/g).length, 3);
-    assert.equal((await request('/takvim.ics?tema=Genel')).status, 400);
-    assert.equal((await request('/takvim.ics?il=Yok')).status, 400);
-    assert.match(await (await request('/takvim.ics?id=' + id)).text(), /BEGIN:VEVENT/);
+    assert.equal((await (await request('/takvim.ics?anahtar=' + key + '&il=Manisa')).text()).match(/BEGIN:VEVENT/g).length, 1);
+    assert.equal((await (await request('/takvim.ics?anahtar=' + key + '&tema=' + encodeURIComponent('Yapay Zekâ'))).text()).match(/BEGIN:VEVENT/g).length, 3);
+    assert.equal((await request('/takvim.ics?anahtar=' + key + '&tema=Genel')).status, 400);
+    assert.equal((await request('/takvim.ics?anahtar=' + key + '&il=Yok')).status, 400);
+    assert.match(await (await request('/takvim.ics?anahtar=' + key + '&id=' + id)).text(), /BEGIN:VEVENT/);
+
+    /* Adres sızarsa yenilenir: eskisi anında geçersizdir, parolaya dokunulmaz. */
+    const fresh = (await (await request('/api/abonelik', 'POST', {}, cookie)).json()).key;
+    assert.notEqual(fresh, key);
+    assert.equal((await request('/takvim.ics?anahtar=' + key)).status, 401, 'yenilenince eski adres kapanır');
+    assert.equal((await request('/takvim.ics?anahtar=' + fresh)).status, 200);
 
     /* Aylık faaliyet raporu (Word): yalnızca yönetici, süzgeçler uygulanır */
     assert.equal((await request('/api/rapor?ay=2026-09')).status, 401, 'ziyaretçi rapor indiremez');
