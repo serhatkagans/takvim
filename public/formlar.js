@@ -370,10 +370,9 @@ async function openEditor(id, tab) {
     renderAudience([]);
     hero('Yeni form', 'Yeni form');
   }
-  $('#edit-results').hidden = $('#edit-preview').hidden = !id;
+  $('#edit-results').hidden = !id;
   $('#edit-results').textContent = draft.responses ? `Yanıtlar (${draft.responses})` : 'Yanıtlar';
   $('#edit-results').href = `#yanitlar/${id}`;
-  $('#edit-preview').href = `#doldur/${id}`;
   editTab(tab === 'ayarlar' ? 'settings' : 'questions');
   renderBanner();
   $('#edit-warning').hidden = !draft.responses;
@@ -711,6 +710,30 @@ async function saveForm({ publish = false } = {}) {
 $('#save-form').onclick = () => saveForm();
 $('#publish-form').onclick = () => saveForm({ publish: true });
 
+/* Önizle: düzenleyicideki hâli (kaydedilmemiş olsa da) il yöneticisinin
+   göreceği biçimde gösterir. Adres değişmez; "Düzenlemeye dön" taslağa
+   dokunmadan düzenleyiciyi geri açar. */
+function previewDraft() {
+  const image = draft.image;
+  renderFill({
+    id: draft.id, title: $('#title-editor').textContent.trim() || 'Başlıksız form', titleRich: richOf($('#title-editor'), true),
+    description: $('#description-editor').innerText.trim(), descriptionRich: richOf($('#description-editor')),
+    deadline: $('#edit-form').elements.deadline.value, accepting: true, answers: {},
+    image: null, imageSrc: image.url || (image.version && !image.removed ? imageUrl(draft.id, image.version) : ''),
+    questions: draft.questions.filter(q => !q.archived && (isSection(q) || q.title.trim())).map(q => ({ ...q, options: (q.options || []).filter(o => o.trim()) })),
+  }, true);
+  $('#edit-view').hidden = true;
+  $('#fill-view').hidden = false;
+  window.scrollTo(0, 0);
+}
+function closePreview() {
+  $('#fill-view').hidden = true;
+  $('#edit-view').hidden = false;
+  hero(draft.id ? 'Formu düzenle' : 'Yeni form', $('#title-editor').textContent.trim() || 'Yeni form');
+  window.scrollTo(0, 0);
+}
+$('#edit-preview').onclick = previewDraft;
+
 /* ---- Kapak görseli (düzenleyici) ----------------------------------------- */
 function renderBanner() {
   const image = draft.image;
@@ -780,7 +803,7 @@ function fillQuestion(q, answer, disabled) {
   else if (q.type === 'select') field = `<select name="${name}"${off} class="fill-narrow" aria-label="${escapeHtml(q.title)}"><option value="">Seçin</option>${q.options.map(o => `<option${o === answer ? ' selected' : ''}>${escapeHtml(o)}</option>`).join('')}</select>`;
   else if (q.type === 'file') {
     files[q.id] = Array.isArray(answer) ? answer.filter(file => file && file.id) : [];
-    field = `<div class="file-field" data-file="${q.id}"><ul class="file-list"></ul>${disabled ? '' : `
+    field = `<div class="file-field" data-file="${q.id}"><ul class="file-list"></ul>${disabled ? (files[q.id].length ? '' : '<small class="muted">Dosya ekleme alanı · PDF, Word, Excel, PowerPoint, görsel</small>') : `
       <label class="button button-secondary file-pick">${ICONS.file}<span>Dosya ekle</span><input type="file" multiple accept="${FILE_ACCEPT}" data-upload="${q.id}" class="visually-hidden"></label>
       <small class="muted">En fazla ${MAX_FILES} dosya, her biri ${MAX_FILE_MB} MB · PDF, Word, Excel, PowerPoint, görsel, metin ya da ZIP</small>`}</div>`;
   } else {
@@ -818,16 +841,24 @@ async function openFill(id) {
   const f = await api('api/forms/' + id);
   /* Kaldırılmış sorular doldurma ekranında yok (merkeze de gelir, burada atılır). */
   f.questions = f.questions.filter(q => !q.archived);
+  renderFill(f);
+}
+
+/* `draftPreview`: düzenleyicideki kaydedilmemiş taslağın önizlemesi (bkz.
+   previewDraft). Sunucuya bir şey gönderilmez; yanıtlar denenebilir ama
+   kaydedilmez, dosya sorusu kapalı kalır. */
+function renderFill(f, draftPreview = false) {
   filling = f; files = {}; page = 0;
   /* Merkez yöneticisi yalnızca merkeze de açık formu doldurur; ötekini önizler. */
-  const preview = central && !f.centralFills;
+  const preview = draftPreview || (central && !f.centralFills);
   canSend = !preview && f.accepting;
   hero(preview ? 'Önizleme' : 'Form', f.title);
   /* Gönderilmemiş taslak, gönderilmiş yanıttan yeniyse o yüklenir. */
   const useDraft = canSend && f.draft && (!f.answeredAt || f.draft.updated > f.answeredAt);
   const answers = (useDraft ? f.draft.answers : f.answers) || {};
   const notes = [];
-  if (f.state === 'draft') notes.push('Bu form taslak: yalnızca merkez yöneticileri görüyor. Yayımlanınca il yöneticileri doldurabilir.');
+  if (draftPreview) notes.push('Önizleme: yanıtları deneyebilirsiniz, hiçbiri kaydedilmez.');
+  else if (f.state === 'draft') notes.push('Bu form taslak: yalnızca merkez yöneticileri görüyor. Yayımlanınca il yöneticileri doldurabilir.');
   else if (preview) notes.push('Bu form merkez yöneticilerinin doldurmasına açık değil; formun ayarlarından açılabilir.');
   else if (f.answeredAt) notes.push(`Yanıtınız ${stamp(f.answeredAt)} tarihinde kaydedildi. ${f.accepting ? 'Değiştirip yeniden gönderebilirsiniz.' : 'Form kapandığı için artık değiştirilemez.'}`);
   else if (!f.accepting) notes.push('Bu form artık yanıt kabul etmiyor.');
@@ -835,9 +866,10 @@ async function openFill(id) {
   const required = f.questions.some(q => q.required);
   pages = splitPages(f.questions);
   /* Google Formlar düzeni: kapak görseli, renk bantlı başlık kartı, bölüm bölüm soru kartları. */
-  $('#fill-form').innerHTML = (central ? `<p class="fp-note">${preview ? 'Önizleme: il yöneticilerinin göreceği biçim.' : 'Formu merkez yöneticisi olarak dolduruyorsunuz.'} <a class="text-link" href="#duzenle/${f.id}">Formu düzenle</a></p>` : '')
+  $('#fill-form').innerHTML = (draftPreview ? `<p class="fp-note">Önizleme: il yöneticilerinin göreceği biçim. Kaydedilmemiş değişiklikler de görünür. <button type="button" class="text-link" data-back-edit>Düzenlemeye dön</button></p>`
+    : central ? `<p class="fp-note">${preview ? 'Önizleme: il yöneticilerinin göreceği biçim.' : 'Formu merkez yöneticisi olarak dolduruyorsunuz.'} <a class="text-link" href="#duzenle/${f.id}">Formu düzenle</a></p>` : '')
     + (useDraft ? `<p class="fp-note fp-flash">${f.answeredAt ? 'Gönderdiğiniz yanıtta' : 'Bu formda'} kaydedilmiş bir taslağınız var (${escapeHtml(stamp(f.draft.updated))}); kaldığınız yerden devam edebilirsiniz. <button type="button" class="text-link" data-drop-draft>Taslağı sil</button></p>` : '')
-    + (f.image ? `<div class="gf-banner"><img src="${imageUrl(f.id, f.image)}" alt="Formun kapak görseli"></div>` : '')
+    + (f.imageSrc || f.image ? `<div class="gf-banner"><img src="${f.imageSrc || imageUrl(f.id, f.image)}" alt="Formun kapak görseli"></div>` : '')
     + `<header class="fp-card gf-header">
         <h1 class="gf-form-title">${richHtml(f.titleRich, f.title, true)}</h1>
         ${f.description ? `<div class="gf-form-desc">${richHtml(f.descriptionRich, f.description)}</div>` : ''}
@@ -845,7 +877,7 @@ async function openFill(id) {
       </header>`
     + pages.map((p, i) => `<div class="fill-page" data-page="${i}"${i ? ' hidden' : ''}>
         ${p.section ? `<div class="fp-card fill-section">${pages.length > 1 ? `<span class="section-tag">Bölüm ${i + 1} / ${pages.length}</span>` : ''}${p.section.title ? `<h2>${escapeHtml(p.section.title)}</h2>` : ''}${p.section.help ? `<p class="fill-help">${escapeHtml(p.section.help)}</p>` : ''}</div>` : ''}
-        ${p.questions.map(q => fillQuestion(q, answers[q.id], !canSend)).join('')}
+        ${p.questions.map(q => fillQuestion(q, answers[q.id], draftPreview ? q.type === 'file' : !canSend)).join('')}
       </div>`).join('')
     + `<div class="fp-actions gf-fill-actions">
         <p class="error" role="alert"></p>
@@ -853,7 +885,7 @@ async function openFill(id) {
         <button type="button" class="button button-primary" data-page-step="1">İleri</button>
         ${canSend ? `<button class="button button-primary" type="submit">${f.answeredAt ? 'Yanıtı güncelle' : 'Gönder'}</button>` : ''}
         <span class="page-progress"><span class="page-bar"><i></i></span><small></small></span>
-        <span class="fill-end">${canSend ? '<small class="draft-status" aria-live="polite"></small><button type="button" class="text-link gf-clear" data-clear-all>Formu temizle</button>' : '<a class="text-link" href="#">Formlara dön</a>'}</span>
+        <span class="fill-end">${draftPreview ? '<button type="button" class="button button-secondary" data-back-edit>Düzenlemeye dön</button>' : canSend ? '<small class="draft-status" aria-live="polite"></small><button type="button" class="text-link gf-clear" data-clear-all>Formu temizle</button>' : '<a class="text-link" href="#">Formlara dön</a>'}</span>
       </div>`;
   for (const q of f.questions) if (q.type === 'file') renderFiles(q.id);
   showPage(0, false);
@@ -968,6 +1000,7 @@ $('#fill-form').addEventListener('change', async event => {
 
 $('#fill-form').addEventListener('click', async event => {
   const target = event.target;
+  if (target.closest('[data-back-edit]')) return closePreview();
   const stepButton = target.closest('[data-page-step]');
   if (stepButton) return step(Number(stepButton.dataset.pageStep));
   const remove = target.closest('[data-remove-file]');
@@ -1002,6 +1035,7 @@ $('#fill-form').addEventListener('submit', async event => {
   event.preventDefault();
   /* Ara sayfada Enter "İleri" demektir. */
   if (page < pages.length - 1) return step(1);
+  if (!canSend) return;
   const { answers, first } = readAnswers(filling.questions, true);
   if (first) {
     /* Hatalı soru başka sayfadaysa oraya dönülür. */
