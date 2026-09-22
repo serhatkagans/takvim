@@ -270,7 +270,56 @@ dialog .choice input[type="radio"], dialog .choice input[type="checkbox"], dialo
 .detail-block p { margin: 0; white-space: pre-wrap }
 .detail-block ul { margin: 0; padding-left: 18px }
 .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; margin: 0 0 16px }
+.photo-grid button { display: block; padding: 0; border: 0; background: none; cursor: zoom-in; border-radius: 8px }
+.photo-grid button:focus-visible { outline: 2px solid var(--color-brand); outline-offset: 2px }
 .photo-grid img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; border: 1px solid var(--color-border) }
+.photo-grid button:hover img { border-color: var(--color-brand) }
+
+/* --- Belge ekleri (katılımcı listesi, görev dağılımı…) ------------------
+   Aynı liste iki yerde: formda kaldırma düğmesiyle, detayda salt okunur
+   indirme bağlantısı olarak (.is-readonly). */
+.field-note { margin: 0; font-size: .8rem; color: var(--color-text-muted) }
+.file-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none }
+.file-list:empty { display: none }
+.file-item { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 10px; align-items: center; border: 1px solid var(--color-border); border-radius: 8px; padding: 8px 10px; background: var(--color-surface) }
+.file-list.is-readonly .file-item { grid-template-columns: auto minmax(0, 1fr) auto }
+.file-tag { font-family: var(--font-display); font-size: .66rem; font-weight: 700; letter-spacing: .04em; border-radius: 4px; padding: 4px 6px; background: var(--color-bg-brand-tint); color: var(--color-brand-active) }
+.file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .87rem; color: var(--color-text-strong) }
+a.file-name { text-decoration: underline; text-underline-offset: 2px }
+a.file-name:hover { color: var(--color-brand) }
+.file-size { font-size: .76rem; color: var(--color-text-muted); white-space: nowrap }
+.file-item button { width: 32px; height: 32px; border: 1px solid var(--color-border-strong); border-radius: 6px; background: var(--color-surface); font-size: 1.1rem; line-height: 1; cursor: pointer }
+.file-item button:hover { border-color: var(--color-danger); color: var(--color-danger) }
+
+/* --- Fotoğraf galerisi -------------------------------------------------- */
+dialog.gallery { width: min(1000px, calc(100% - 24px)); padding: 0; border: 0; background: #1b1b1d; color: #fff; overflow: hidden }
+dialog.gallery::backdrop { background: rgba(20,20,22,.82) }
+/* Kapat düğmesi fotoğrafın üstünde durur: açık bir görselde kaybolmasın
+   diye oklarla aynı koyu madalyonu taşır. */
+dialog.gallery .close { position: absolute; top: 10px; right: 10px; z-index: 2; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0; border-radius: 9999px; background: rgba(0,0,0,.5); color: #fff; font-size: 1.5rem }
+dialog.gallery .close:hover { background: var(--color-brand); color: #fff }
+.gallery-stage { position: relative; margin: 0; display: flex; align-items: center; justify-content: center; min-height: 240px; background: #111113; touch-action: pan-y }
+.gallery-stage img { display: block; max-width: 100%; max-height: min(72vh, 620px); object-fit: contain; user-select: none; -webkit-user-drag: none }
+.gallery-bar { display: grid; gap: 10px; justify-items: center; padding: 12px 16px 16px }
+.gallery-bar p { margin: 0; font-size: .85rem; color: #d7d7da; text-align: center }
+.gallery-thumbs { display: flex; gap: 6px; max-width: 100%; overflow-x: auto; padding: 2px }
+.gallery-thumbs button { flex: 0 0 auto; padding: 0; border: 2px solid transparent; border-radius: 6px; background: none; cursor: pointer; opacity: .55 }
+.gallery-thumbs button.is-current, .gallery-thumbs button:hover { opacity: 1; border-color: var(--color-brand) }
+.gallery-thumbs img { display: block; width: 56px; height: 42px; object-fit: cover; border-radius: 4px }
+/* Yön okları: portaldaki galeriyle aynı görünüm (genctek-portal). */
+.galeri-yon-oku { position: absolute; top: 50%; transform: translateY(-50%); display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 0; border-radius: 9999px; background: rgba(0,0,0,.5); cursor: pointer }
+.galeri-yon-oku:hover { background: var(--color-brand) }
+/* Ok, iki kenarı çizili bir karenin döndürülmüşü; çizgiler ortalansın diye
+   döndürmeden sonra yarım kenar kaydırılır. */
+.galeri-yon-oku::before { content: ''; display: block; width: 12px; height: 12px; border-top: 2px solid #fff; border-right: 2px solid #fff }
+.galeri-yon-oku-sol { left: 10px }
+.galeri-yon-oku-sol::before { transform: rotate(-135deg) translate(-2px, -2px) }
+.galeri-yon-oku-sag { right: 10px }
+.galeri-yon-oku-sag::before { transform: rotate(45deg) translate(-2px, 2px) }
+@media (max-width: 620px) {
+  .galeri-yon-oku { width: 38px; height: 38px }
+  .gallery-stage img { max-height: 56vh }
+}
 /* Formdaki "+ ekle" düğmeleri, fotoğraf önizlemeleri ve paydaş satırları */
 .inline-add { justify-self: start; min-height: 38px; padding: 7px 14px; font-size: .85rem }
 .partner-rows { display: grid; gap: 8px }

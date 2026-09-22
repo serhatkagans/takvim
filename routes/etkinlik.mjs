@@ -1,5 +1,5 @@
-import { listOf, validFilters, filterSql, photoType, MAX_PHOTOS, MAX_PHOTO_BYTES, validateEvent, validDay, daysBetween, dayString, ValidationError, MAX_RANGE_DAYS, SEARCH_LIMIT, FEED_LIMIT, CENTER } from '../lib/data.mjs';
-import { displayName, userByIcsKey } from '../lib/users.mjs';
+import { listOf, validFilters, filterSql, photoType, MAX_PHOTOS, MAX_PHOTO_BYTES, fileInfo, MAX_FILE_BYTES, MAX_EVENT_FILES, validateEvent, validDay, daysBetween, dayString, ValidationError, MAX_RANGE_DAYS, SEARCH_LIMIT, FEED_LIMIT, CENTER } from '../lib/data.mjs';
+import { displayName, nameOf, userByIcsKey } from '../lib/users.mjs';
 import { buildIcs } from '../lib/ics.mjs';
 import { buildRapor, periodInfo } from '../lib/rapor.mjs';
 import { buildExcel } from '../lib/excel.mjs';
@@ -244,6 +244,65 @@ export function etkinlikRoutes({ db, logo }) {
     return send(res, 405, { error: 'Geçersiz işlem.' });
   }
 
+  /* ---- Belgeler (katılımcı listesi, görev dağılımı, PDF / Excel…) ------
+     Fotoğraflarla aynı yetki kuralı: listeleme ve indirme oturum ister,
+     ekleme ve silme etkinliği düzenleme yetkisiyle aynıdır. Dosyalar diskte
+     değil `event_files` tablosunda durur — fotoğraflar gibi veritabanı
+     yedeğine girsinler diye.
+
+     Dosyanın kendisi ASLA tarayıcıda açılmaz: türü uzantıdan bulunur (bkz.
+     lib/data.mjs fileInfo) ve yanıt her zaman `attachment` gönderilir.
+     Yüklemede dosya adı gövdede değil `X-File-Name` başlığında gelir
+     (yüzde kodlu): gövde ham dosyanın kendisidir, çok parçalı form
+     çözümlemesine gerek kalmaz (form dosya sorusuyla aynı yöntem). */
+  async function filesOfEvent(req, res, user, eventId, fileId) {
+    const target = await db.get('SELECT cities,owner FROM events WHERE id=? AND deleted_at IS NULL', [eventId]);
+    if (!target) return send(res, 404, { error: 'Etkinlik bulunamadı.' });
+    if (!user) return send(res, 401, { error: 'Önce giriş yapın.' });
+
+    if (req.method === 'GET' && !fileId) {
+      /* Yükleyenin adı listede görünür; T.C. kimlik numarası (users.username)
+         bilerek sorgulanmaz — adı girilmemiş hesapta alan boş kalır. */
+      const rows = await db.all(`SELECT f.id,f.name,f.size,f.created`
+        + `,(SELECT u.first_name FROM users u WHERE u.id = f.user_id) AS first_name`
+        + `,(SELECT u.last_name FROM users u WHERE u.id = f.user_id) AS last_name`
+        + ` FROM event_files f WHERE f.event_id=? ORDER BY f.id`, [eventId]);
+      return send(res, 200, rows.map(r => ({ id: Number(r.id), name: r.name, size: Number(r.size), created: r.created, by: nameOf(r.first_name, r.last_name) })));
+    }
+
+    if (req.method === 'GET' && fileId) {
+      const file = await db.get('SELECT name,type,data FROM event_files WHERE id=? AND event_id=?', [fileId, eventId]);
+      if (!file) return send(res, 404, { error: 'Belge bulunamadı.' });
+      const data = Buffer.from(file.data);
+      /* Eski tarayıcılar `filename*` okumaz; ASCII'ye indirgenmiş ad yedektir. */
+      const ascii = file.name.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
+      res.writeHead(200, { 'Content-Type': file.type, 'Content-Length': data.length, 'Cache-Control': 'private, no-store',
+        'Content-Disposition': `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(file.name)}` });
+      return res.end(req.method === 'HEAD' ? undefined : data);
+    }
+
+    if (!canManage(user, target)) return send(res, 403, { error: 'Bu etkinlik için yetkiniz yok.' });
+
+    if (req.method === 'POST' && !fileId) {
+      let rawName = '';
+      try { rawName = decodeURIComponent(String(req.headers['x-file-name'] || '')); } catch {}
+      const info = fileInfo(rawName);
+      if ((await db.get('SELECT CAST(count(*) AS INTEGER) AS n FROM event_files WHERE event_id=?', [eventId])).n >= MAX_EVENT_FILES)
+        throw new ValidationError(`Bir etkinliğe en fazla ${MAX_EVENT_FILES} belge eklenebilir.`);
+      const data = await rawBody(req, MAX_FILE_BYTES);
+      if (!data.length) throw new ValidationError('Dosya boş.');
+      const row = await db.get('INSERT INTO event_files(event_id,user_id,name,type,size,data,created) VALUES(?,?,?,?,?,?,?) RETURNING id',
+        [eventId, user.id, info.name, info.type, data.length, data, new Date().toISOString()]);
+      return send(res, 201, { id: Number(row.id), name: info.name, size: data.length });
+    }
+
+    if (req.method === 'DELETE' && fileId) {
+      if (!await db.run('DELETE FROM event_files WHERE id=? AND event_id=?', [fileId, eventId])) return send(res, 404, { error: 'Belge bulunamadı.' });
+      return send(res, 200, { ok: true });
+    }
+    return send(res, 405, { error: 'Geçersiz işlem.' });
+  }
+
   return async function handle({ req, res, url, user, readOnly }) {
     if (url.pathname === '/takvim.ics' && readOnly) return icsFeed(req, res, url);
     if (url.pathname === '/api/rapor' && req.method === 'GET') return rapor(res, url, user);
@@ -262,6 +321,9 @@ export function etkinlikRoutes({ db, logo }) {
 
     const photoPath = url.pathname.match(/^\/api\/events\/(\d{1,9})\/photos(?:\/(\d{1,9}))?$/);
     if (photoPath) return photoOfEvent(req, res, user, Number(photoPath[1]), Number(photoPath[2]));
+
+    const filePath = url.pathname.match(/^\/api\/events\/(\d{1,9})\/belgeler(?:\/(\d{1,9}))?$/);
+    if (filePath) return filesOfEvent(req, res, user, Number(filePath[1]), Number(filePath[2]));
 
     const match = url.pathname.match(/^\/api\/events(?:\/(\d{1,9}))?$/);
     if (match && ['POST', 'PUT', 'DELETE'].includes(req.method)) return writeEvent(req, res, user, Number(match[1]));

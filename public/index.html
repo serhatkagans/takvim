@@ -50,8 +50,8 @@
         <button type="button" class="stat" data-stat="cities" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-cities">—</strong><span>İl dağılımı ▾</span></button>
         <button type="button" class="stat" data-stat="participants" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-participants">—</strong><span>Katılan il ▾</span></button>
         <button type="button" class="stat" data-stat="themes" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-themes">—</strong><span>Çalışma grubu ▾</span></button>
-        <button type="button" class="stat" data-stat="students" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-students">—</strong><span>Öğrenci ▾</span></button>
-        <button type="button" class="stat" data-stat="teachers" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-teachers">—</strong><span>Öğretmen ▾</span></button>
+        <button type="button" class="stat" data-stat="students" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-students">—</strong><span>Ulaşılan öğrenci ▾</span></button>
+        <button type="button" class="stat" data-stat="teachers" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-teachers">—</strong><span>Ulaşılan öğretmen ▾</span></button>
         <button type="button" class="stat" data-stat="stakeholders" aria-expanded="false" aria-controls="stat-breakdown"><strong id="stat-stakeholders">—</strong><span>Paydaş / kurum ▾</span></button>
         <div id="stat-breakdown" class="stat-breakdown" hidden><div class="stat-breakdown-body"></div></div>
       </div>
@@ -306,6 +306,13 @@
       <button type="button" id="photo-add" class="button button-secondary inline-add">+ Fotoğraf ekle</button>
       <input id="photo-input" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden>
     </fieldset>
+    <fieldset class="choice">
+      <legend>Belgeler <small id="file-count">0 / 20</small></legend>
+      <p class="field-note">Katılımcı listesi, etkinlik görev dağılımı, davet yazısı… PDF, Word, Excel, PowerPoint, görsel, metin ya da ZIP; her dosya en fazla 10 MB.</p>
+      <ul id="file-list" class="file-list"></ul>
+      <button type="button" id="file-add" class="button button-secondary inline-add">+ Belge ekle</button>
+      <input id="file-input" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.jpg,.jpeg,.png,.webp,.txt,.csv,.zip" multiple hidden>
+    </fieldset>
     <p class="error" role="alert"></p>
     <button class="button button-primary" type="submit">Etkinliği kaydet</button>
   </form>
@@ -328,6 +335,7 @@
   <div id="detail-purpose-block" class="detail-block"><h3>Amaç</h3><p id="detail-purpose"></p></div>
   <div class="detail-block"><h3>Açıklama / kapsam</h3><p id="detail-description"></p></div>
   <div id="detail-partners-block" class="detail-block"><h3>Paydaş / İşbirliği Yapılan Kurum / Kişi</h3><ul id="detail-partners"></ul></div>
+  <div id="detail-files-block" class="detail-block" hidden><h3>Belgeler</h3><ul id="detail-files" class="file-list is-readonly"></ul></div>
   <div id="detail-photos" class="photo-grid" hidden></div>
   <div class="detail-actions">
     <a id="export" class="button button-primary" href="#">Takvimime ekle (.ics)</a>
@@ -335,6 +343,23 @@
     <button id="delete" class="button button-danger" hidden>Sil</button>
   </div>
   <p class="error" role="alert"></p>
+</dialog>
+
+<!-- Fotoğraf galerisi: detay penceresindeki bir fotoğrafa basınca açılır.
+     Eskiden fotoğraflar yeni sekmede açılıyordu; galeride etkinliğin bütün
+     fotoğrafları arasında ok tuşları, düğmeler ve parmakla gezilir. -->
+<dialog id="gallery-dialog" class="gallery" aria-label="Etkinlik fotoğrafları">
+  <button class="close" data-close aria-label="Kapat">×</button>
+  <figure class="gallery-stage">
+    <img id="gallery-image" alt="">
+    <button type="button" id="gallery-prev" class="galeri-yon-oku galeri-yon-oku-sol" aria-label="Önceki fotoğraf"></button>
+    <button type="button" id="gallery-next" class="galeri-yon-oku galeri-yon-oku-sag" aria-label="Sonraki fotoğraf"></button>
+  </figure>
+  <div class="gallery-bar">
+    <p id="gallery-caption"></p>
+    <div id="gallery-thumbs" class="gallery-thumbs"></div>
+    <a id="gallery-download" class="button button-secondary" href="#" download>Fotoğrafı indir</a>
+  </div>
 </dialog>
 
 </body>

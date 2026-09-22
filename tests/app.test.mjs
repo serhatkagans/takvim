@@ -402,6 +402,28 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
     assert.deepEqual(Buffer.from(await photo.arrayBuffer()), jpeg);
     assert.equal((await request(`/api/events/${id}/photos/${photoIds[6]}`, 'DELETE', null, cookie)).status, 200);
     assert.deepEqual((await (await request(`/api/events/${id}/photos`, 'GET', null, cookie)).json()).map(p => p.id), photoIds.slice(0, 6));
+    /* Belgeler: tür uzantıdan bulunur, listeleme ve indirme oturum ister,
+       indirme her zaman ek (attachment) olarak gelir. */
+    const sendFile = (name, bytes, cookieValue) => fetch(`${origin}/api/events/${id}/belgeler`, {
+      method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/octet-stream', 'X-File-Name': encodeURIComponent(name), Cookie: cookieValue }, body: bytes });
+    const roster = Buffer.from('ad;soyad\r\nAyşe;Yılmaz\r\n', 'utf8');
+    assert.equal((await sendFile('katılımcılar.csv', roster, '')).status, 401, 'belge yüklemek oturum ister');
+    assert.equal((await sendFile('görevler.exe', roster, cookie)).status, 400, 'izin verilmeyen uzantı reddedilir');
+    assert.equal((await sendFile('boş.pdf', Buffer.alloc(0), cookie)).status, 400, 'boş dosya reddedilir');
+    const added = await sendFile('katılımcı listesi.csv', roster, cookie);
+    assert.equal(added.status, 201);
+    const fileId = (await added.json()).id;
+    assert.equal((await request(`/api/events/${id}/belgeler`)).status, 401, 'belge listesi oturum ister');
+    const fileList = await (await request(`/api/events/${id}/belgeler`, 'GET', null, cookie)).json();
+    assert.deepEqual(fileList.map(f => [f.name, f.size]), [['katılımcı listesi.csv', roster.length]]);
+    const download = await request(`/api/events/${id}/belgeler/${fileId}`, 'GET', null, cookie);
+    assert.equal(download.status, 200);
+    assert.equal(download.headers.get('content-type'), 'text/csv');
+    assert.match(download.headers.get('content-disposition'), /^attachment;/, 'belge tarayıcıda açılmaz');
+    assert.deepEqual(Buffer.from(await download.arrayBuffer()), roster);
+    assert.equal((await request(`/api/events/${id}/belgeler/${fileId}`, 'DELETE', null, cookie)).status, 200);
+    assert.deepEqual(await (await request(`/api/events/${id}/belgeler`, 'GET', null, cookie)).json(), []);
+
     assert.equal('url' in records[0], false, 'katılım bağlantısı artık dönmez');
     /* Kaydı kimin açtığı "kendi girdiğim etkinlikler" süzgeci için dönüyor. */
     const sahipli = await (await request('/api/events?tum=1', 'GET', null, cookie)).json();

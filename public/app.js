@@ -32,6 +32,9 @@ const groupLabel = e => listOf(e.work_groups).join(', ');
 const partnersOf = e => { try { const value = JSON.parse(e.partners || '[]'); return Array.isArray(value) ? value : []; } catch { return []; } };
 const partnerLabel = p => [p.person, p.org].filter(Boolean).join(' – ');
 const MAX_PHOTOS = 7, MAX_PHOTO_MB = 15, MAX_PARTNERS = 20, MAX_DAY_EVENTS = 3;
+/* Belge ekleri; sunucudaki sınırların aynısı (bkz. lib/data.mjs). */
+const MAX_EVENT_FILES = 20, MAX_FILE_MB = 10;
+const FILE_EXTENSIONS = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'jpg', 'jpeg', 'png', 'webp', 'txt', 'csv', 'zip'];
 /* Sayaç dökümünde bir değer seçilince altında listelenen en fazla etkinlik. */
 const MAX_STAT_EVENTS = 10;
 /* Dökümde "devamını göster" ile açılmış listeler; kart değişince sıfırlanır. */
@@ -307,18 +310,23 @@ const statFilters = {
   /* Etkinliğe katılan iller (düzenleyenler hariç); her il katıldığı etkinlik sayısıyla. */
   participants: { values: e => listOf(e.participants), distinct: true, showAll: true },
   themes: { values: groupsOf, all: () => meta.groups, distinct: true, showAll: true },
-  /* `byEvent`: il yerine her etkinliğin kendi katılımcı sayısı; tıklamak etkinliği açar. */
-  students: { weight: e => e.students || 0, byEvent: true },
-  teachers: { weight: e => e.teachers || 0, byEvent: true },
+  /* `byEvent`: il yerine her etkinliğin kendi katılımcı sayısı; tıklamak etkinliği açar.
+     Yalnızca TAMAMLANAN etkinlikler sayılır: planlanan sayılar henüz gerçekleşmediği
+     için "ulaşılan kişi" toplamına girmez (ertelenen ve iptal edilenler de girmez). */
+  students: { subset: e => e.status === 'Tamamlandı', weight: e => e.students || 0, byEvent: true },
+  teachers: { subset: e => e.status === 'Tamamlandı', weight: e => e.teachers || 0, byEvent: true },
   /* `byPartner`: her paydaş kurum (kurum adı yoksa kişi) ve katıldığı etkinlikler. */
   stakeholders: { values: e => partnersOf(e).map(p => nameKey(partnerName(p))), distinct: true, byPartner: true },
 };
 
 /** Kartın büyük sayısı: farklı il / grup / paydaş adedi, kişi toplamı ya da etkinlik adedi. */
 function statTotal(stat, list) {
-  if (stat.distinct) return new Set(list.flatMap(stat.values)).size;
-  if (stat.weight) return list.reduce((total, e) => total + stat.weight(e), 0);
-  return list.filter(stat.subset).length;
+  /* `subset` hepsinde geçerlidir: kişi toplamları da yalnızca kartın kapsadığı
+     etkinlikleri sayar (öğrenci / öğretmen kartlarında tamamlananlar). */
+  const rows = stat.subset ? list.filter(stat.subset) : list;
+  if (stat.distinct) return new Set(rows.flatMap(stat.values)).size;
+  if (stat.weight) return rows.reduce((total, e) => total + stat.weight(e), 0);
+  return rows.length;
 }
 
 /* Kart sayıları sayfa açılınca 0'dan hedefe sayar; sonraki değişimlerde
@@ -491,10 +499,25 @@ function showEvent(id) {
   const gallery = $('#detail-photos'), shown = selected.id;
   gallery.hidden = true;
   gallery.innerHTML = '';
+  galleryPhotos = [];
   api(`api/events/${shown}/photos`).then(rows => {
     if (selected?.id !== shown) return; /* bu arada başka etkinlik açıldıysa */
-    gallery.innerHTML = rows.map((row, i) => `<a href="api/photos/${row.id}" target="_blank" rel="noopener"><img src="api/photos/${row.id}" alt="${escapeHtml(selected.title)} — fotoğraf ${i + 1}" loading="lazy"></a>`).join('');
+    /* Fotoğraflar yeni sekmede değil galeri penceresinde açılır (aşağıda,
+       openGallery): sıradaki fotoğrafa geçmek için takvime dönmek gerekmesin. */
+    galleryPhotos = rows.map(row => row.id);
+    galleryTitle = selected.title;
+    gallery.innerHTML = rows.map((row, i) => `<button type="button" data-photo="${i}" aria-label="${escapeHtml(selected.title)} — fotoğraf ${i + 1} (büyüt)"><img src="api/photos/${row.id}" alt="" loading="lazy"></button>`).join('');
     gallery.hidden = !rows.length;
+  }).catch(() => {});
+  const filesBlock = $('#detail-files-block'), fileBox = $('#detail-files');
+  filesBlock.hidden = true;
+  fileBox.innerHTML = '';
+  api(`api/events/${shown}/belgeler`).then(rows => {
+    if (selected?.id !== shown) return;
+    fileBox.innerHTML = rows.map(row =>
+      fileRow(`<a class="file-name" href="api/events/${shown}/belgeler/${row.id}">${escapeHtml(row.name)}</a>`
+        + `<span class="file-size">${escapeHtml(sizeLabel(row.size))}${row.by ? ' · ' + escapeHtml(row.by) : ''}</span>`, row.name)).join('');
+    filesBlock.hidden = !rows.length;
   }).catch(() => {});
   $('#export').href = `takvim.ics?id=${selected.id}&anahtar=${encodeURIComponent(icsKey)}`;
   /* İl yöneticisi kendi ilini içeren etkinlikleri yönetir; yetkisi olmayan
@@ -591,6 +614,105 @@ function checkPhoto(file) {
   return file;
 }
 
+/* --- Fotoğraf galerisi ----------------------------------------------------
+   Detaydaki fotoğraflar eskiden yeni sekmede açılıyordu: sıradakine bakmak
+   için sekmeyi kapatıp takvime dönmek gerekiyordu. Artık fotoğraflar bir
+   pencerede büyür; ok tuşları, yandaki düğmeler, alttaki küçük görseller ve
+   dokunmatikte parmakla kaydırma aynı etkinliğin fotoğrafları arasında gezer. */
+let galleryPhotos = [], galleryTitle = '', galleryAt = 0;
+
+function renderGallery() {
+  const id = galleryPhotos[galleryAt];
+  if (id === undefined) return;
+  $('#gallery-image').src = `api/photos/${id}`;
+  $('#gallery-image').alt = `${galleryTitle} — fotoğraf ${galleryAt + 1}`;
+  $('#gallery-caption').textContent = `${galleryTitle} · ${galleryAt + 1} / ${galleryPhotos.length}`;
+  $('#gallery-download').href = `api/photos/${id}`;
+  /* Tek fotoğrafta gezinme gereksiz; düğmeler ve şerit hiç çizilmez. */
+  const many = galleryPhotos.length > 1;
+  $('#gallery-prev').hidden = $('#gallery-next').hidden = !many;
+  $('#gallery-thumbs').hidden = !many;
+  $('#gallery-thumbs').innerHTML = !many ? '' : galleryPhotos.map((photoId, i) =>
+    `<button type="button" data-go="${i}" class="${i === galleryAt ? 'is-current' : ''}" aria-label="Fotoğraf ${i + 1}" aria-current="${i === galleryAt}"><img src="api/photos/${photoId}" alt="" loading="lazy"></button>`).join('');
+  $('#gallery-thumbs').querySelector('.is-current')?.scrollIntoView({ block: 'nearest', inline: 'center' });
+}
+
+/** Baştan sona ve sondan başa döner: uçlarda düğme ölü kalmasın. */
+function goGallery(step) {
+  if (galleryPhotos.length < 2) return;
+  galleryAt = (galleryAt + step + galleryPhotos.length) % galleryPhotos.length;
+  renderGallery();
+}
+
+function openGallery(index) {
+  if (!galleryPhotos.length) return;
+  galleryAt = Math.min(Math.max(0, index), galleryPhotos.length - 1);
+  renderGallery();
+  $('#gallery-dialog').showModal();
+}
+
+/* --- Belgeler -------------------------------------------------------------
+   Fotoğraflarla aynı düzen: kayıttakiler (existing), kaldırılmak üzere
+   işaretlenenler (removed) ve henüz yüklenmemişler (pending). Etkinlik
+   kaydedilince işlenir; yeni etkinliğin belgesi ancak kimliği oluştuktan
+   sonra yüklenebilir. Dosya adı gövdede değil `X-File-Name` başlığında
+   gider (bkz. routes/etkinlik.mjs). */
+let fileState = { existing: [], removed: new Set(), pending: [] };
+const keptFiles = () => fileState.existing.filter(f => !fileState.removed.has(f.id));
+
+/** "1,4 MB" / "812 KB" — listede dosya boyutu. */
+function sizeLabel(bytes) {
+  if (bytes >= 1048576) return `${(bytes / 1048576).toLocaleString('tr-TR', { maximumFractionDigits: 1 })} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024)).toLocaleString('tr-TR')} KB`;
+}
+
+/** Uzantıdan kısa bir rozet: PDF, XLSX… (dosya adı uzunsa tür yine görünsün). */
+const fileTag = name => (name.includes('.') ? name.split('.').pop() : '').toUpperCase().slice(0, 4) || 'DOSYA';
+
+const fileRow = (inner, name) => `<li class="file-item"><span class="file-tag">${escapeHtml(fileTag(name))}</span>${inner}</li>`;
+
+function renderFiles() {
+  const kept = keptFiles(), total = kept.length + fileState.pending.length;
+  $('#file-list').innerHTML = kept.map(f =>
+    fileRow(`<span class="file-name">${escapeHtml(f.name)}</span><span class="file-size">${escapeHtml(sizeLabel(f.size))}</span>`
+      + `<button type="button" data-file-remove="${f.id}" aria-label="${escapeHtml(f.name)} belgesini kaldır">×</button>`, f.name)).join('')
+    + fileState.pending.map((p, i) =>
+      fileRow(`<span class="file-name">${escapeHtml(p.file.name)}</span><span class="file-size">${escapeHtml(sizeLabel(p.file.size))} · yüklenecek</span>`
+        + `<button type="button" data-file-pending="${i}" aria-label="${escapeHtml(p.file.name)} belgesini kaldır">×</button>`, p.file.name)).join('');
+  $('#file-count').textContent = `${total} / ${MAX_EVENT_FILES}`;
+  $('#file-add').disabled = total >= MAX_EVENT_FILES;
+}
+
+/** Sunucunun uyguladığı sınırların istemcideki karşılığı: tür uzantıdan,
+    boyut dosyadan denetlenir (bkz. lib/data.mjs fileInfo). */
+function checkFile(file) {
+  const ext = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : '';
+  if (!FILE_EXTENSIONS.includes(ext)) throw Error(`"${file.name}" yüklenemez. PDF, Word, Excel, PowerPoint, görsel, metin ya da ZIP dosyası seçin.`);
+  if (file.size > MAX_FILE_MB * 1024 * 1024) throw Error(`"${file.name}" çok büyük; bir belge en fazla ${MAX_FILE_MB} MB olabilir.`);
+  if (!file.size) throw Error(`"${file.name}" boş.`);
+  return file;
+}
+
+async function saveFiles(id) {
+  for (const fileId of [...fileState.removed]) {
+    await api(`api/events/${id}/belgeler/${fileId}`, { method: 'DELETE' });
+    fileState.removed.delete(fileId);
+    fileState.existing = fileState.existing.filter(f => f.id !== fileId);
+  }
+  while (fileState.pending.length) {
+    const [next] = fileState.pending;
+    const response = await fetch(`api/events/${id}/belgeler`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream', 'X-File-Name': encodeURIComponent(next.file.name) },
+      body: next.file,
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw Error(result.error || 'Belge yüklenemedi.');
+    fileState.pending.shift();
+    fileState.existing.push({ id: result.id, name: result.name, size: result.size });
+  }
+}
+
 async function savePhotos(id) {
   for (const photoId of [...photoState.removed]) {
     await api(`api/events/${id}/photos/${photoId}`, { method: 'DELETE' });
@@ -614,10 +736,17 @@ function editEvent(event) {
   for (const p of photoState.pending) URL.revokeObjectURL(p.url);
   photoState = { existing: [], removed: new Set(), pending: [] };
   renderPhotos();
+  fileState = { existing: [], removed: new Set(), pending: [] };
+  renderFiles();
   if (event) api(`api/events/${event.id}/photos`).then(rows => {
     if (form.elements.id.value !== String(event.id)) return;
     photoState.existing = rows.map(row => row.id);
     renderPhotos();
+  }).catch(error => { form.querySelector('.error').textContent = error.message; });
+  if (event) api(`api/events/${event.id}/belgeler`).then(rows => {
+    if (form.elements.id.value !== String(event.id)) return;
+    fileState.existing = rows.map(row => ({ id: row.id, name: row.name, size: row.size }));
+    renderFiles();
   }).catch(error => { form.querySelector('.error').textContent = error.message; });
   $('#partner-rows').innerHTML = '';
   $('#partner-add').disabled = false;
@@ -1056,6 +1185,57 @@ $('#photo-list').addEventListener('click', event => {
   if (pending) URL.revokeObjectURL(photoState.pending.splice(Number(pending.dataset.pendingRemove), 1)[0].url);
   renderPhotos();
 });
+/* Galeri: detaydaki fotoğrafa basınca açılır, içinde düğmeler / oklar /
+   küçük görseller gezdirir. Klavye dinleyicisi yalnızca pencere açıkken
+   iş görür; Esc'i <dialog> kendisi kapatır. */
+$('#detail-photos').addEventListener('click', event => {
+  const thumb = event.target.closest('[data-photo]');
+  if (thumb) openGallery(Number(thumb.dataset.photo));
+});
+$('#gallery-prev').onclick = () => goGallery(-1);
+$('#gallery-next').onclick = () => goGallery(1);
+$('#gallery-thumbs').addEventListener('click', event => {
+  const pick = event.target.closest('[data-go]');
+  if (!pick) return;
+  galleryAt = Number(pick.dataset.go);
+  renderGallery();
+});
+document.addEventListener('keydown', event => {
+  if (!$('#gallery-dialog').open) return;
+  if (event.key === 'ArrowRight') { event.preventDefault(); goGallery(1); }
+  if (event.key === 'ArrowLeft') { event.preventDefault(); goGallery(-1); }
+});
+/* Dokunmatikte parmakla kaydırma: yatay hareket dikeyden belirgin biçimde
+   uzunsa fotoğraf değiştirilir, dikey kaydırma engellenmez. */
+let swipeFrom = null;
+$('.gallery-stage').addEventListener('pointerdown', event => { swipeFrom = { x: event.clientX, y: event.clientY }; });
+$('.gallery-stage').addEventListener('pointerup', event => {
+  if (!swipeFrom) return;
+  const dx = event.clientX - swipeFrom.x, dy = event.clientY - swipeFrom.y;
+  swipeFrom = null;
+  if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) goGallery(dx < 0 ? 1 : -1);
+});
+
+$('#file-add').onclick = () => $('#file-input').click();
+$('#file-input').addEventListener('change', event => {
+  const input = event.target, error = $('#event-form .error'), files = [...input.files];
+  const room = Math.max(0, MAX_EVENT_FILES - keptFiles().length - fileState.pending.length);
+  input.value = '';
+  error.textContent = files.length > room ? `Bir etkinliğe en fazla ${MAX_EVENT_FILES} belge eklenebilir; seçtiklerinizin ilk ${room} tanesi alındı.` : '';
+  try {
+    for (const file of files.slice(0, room)) {
+      fileState.pending.push({ file: checkFile(file) });
+      renderFiles();
+    }
+  } catch (problem) { error.textContent = problem.message; }
+});
+$('#file-list').addEventListener('click', event => {
+  const kept = event.target.closest('[data-file-remove]'), pending = event.target.closest('[data-file-pending]');
+  if (kept) fileState.removed.add(Number(kept.dataset.fileRemove));
+  if (pending) fileState.pending.splice(Number(pending.dataset.filePending), 1);
+  renderFiles();
+});
+
 $('#add').onclick = () => editEvent();
 $('#edit').onclick = () => { $('#detail-dialog').close(); editEvent(selected); };
 
@@ -1072,14 +1252,14 @@ $('#event-form').onsubmit = submitHandler(async form => {
   data.partners = readPartners();
   if (!data.subtypes.length) throw Error('En az bir etkinlik türü seçin.');
   const saved = await api('api/events' + (data.id ? '/' + data.id : ''), { method: data.id ? 'PUT' : 'POST', body: JSON.stringify(data) });
-  /* Fotoğraflardan biri yüklenemezse etkinlik kaydı yine durur; form artık
-     bu kaydı düzenler, tekrar "Kaydet" yinelenen etkinlik açmaz. */
+  /* Fotoğraf ya da belgelerden biri yüklenemezse etkinlik kaydı yine durur;
+     form artık bu kaydı düzenler, tekrar "Kaydet" yinelenen etkinlik açmaz. */
   form.elements.id.value = saved.id;
   form.elements.updated.value = saved.updated;
   month = new Date(data.start.slice(0, 7) + '-01T12:00:00');
-  try { await savePhotos(saved.id); }
-  catch (error) { throw Error('Etkinlik kaydedildi, ancak fotoğraflar tamamlanamadı: ' + error.message); }
-  finally { renderPhotos(); await Promise.all([reload(), loadTotals()]); }
+  try { await savePhotos(saved.id); await saveFiles(saved.id); }
+  catch (error) { throw Error('Etkinlik kaydedildi, ancak ekler tamamlanamadı: ' + error.message); }
+  finally { renderPhotos(); renderFiles(); await Promise.all([reload(), loadTotals()]); }
   $('#event-dialog').close();
 });
 
