@@ -462,8 +462,14 @@ const ICONS = {
   close: svg('M19 6.4 17.6 5 12 10.6 6.4 5 5 6.4 10.6 12 5 17.6 6.4 19 12 13.4 17.6 19 19 17.6 13.4 12z'),
   plus: svg('M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z'),
   section: svg('M3 5h18v2H3V5zm0 6h18v2H3v-2zm0 6h12v2H3v-2z'),
+  grip: svg('M5 8h2v2H5V8zm6 0h2v2h-2V8zm6 0h2v2h-2V8zM5 14h2v2H5v-2zm6 0h2v2h-2v-2zm6 0h2v2h-2v-2z'),
   file: svg('M16.5 6v11.5a4 4 0 0 1-8 0V5a2.5 2.5 0 0 1 5 0v10.5a1 1 0 0 1-2 0V6H10v9.5a2.5 2.5 0 0 0 5 0V5a4 4 0 0 0-8 0v12.5a5.5 5.5 0 0 0 11 0V6h-1.5z'),
 };
+
+/* Kartın üst ortasındaki tutamak: kart buradan sürüklenerek sıralanır.
+   Klavyeyle sıralama seçili karttaki ok düğmeleriyle yapılır, bu yüzden
+   tutamak sekme sırasına girmez. */
+const DRAG_HANDLE = `<button type="button" class="drag-handle" data-drag tabindex="-1" aria-hidden="true" title="Sürükleyerek taşı">${ICONS.grip}</button>`;
 
 /* Seçenek işareti: tek seçimde daire, çoklu seçimde kare, listede sıra no. */
 const optionMark = (type, j) => `<span class="option-mark is-${type}" aria-hidden="true">${type === 'select' ? `${j + 1}.` : ''}</span>`;
@@ -492,7 +498,7 @@ function sectionCard(q, index) {
        <input data-field="help" value="${escapeHtml(q.help)}" maxlength="1000" placeholder="Açıklama (isteğe bağlı)" aria-label="Bölüm açıklaması" class="question-help">`
     : `<p class="question-preview-title">${q.title ? escapeHtml(q.title) : '<span class="muted">Başlıksız bölüm</span>'}</p>${q.help ? `<p class="fill-help">${escapeHtml(q.help)}</p>` : ''}`;
   return `<article class="question-card fp-card section-card${active ? ' is-active' : ' is-preview'}" data-q="${index}"${active ? '' : ` tabindex="0" role="button" aria-label="${sectionLabel(index)} başlığını düzenle"`}>
-    <span class="section-tag">${sectionLabel(index)}</span>
+    ${DRAG_HANDLE}<span class="section-tag">${sectionLabel(index)}</span>
     ${body}${tools}
   </article>`;
 }
@@ -503,6 +509,7 @@ function questionPreview(q, index) {
     ? `<ul class="option-list is-preview">${q.options.map((option, j) => `<li>${optionMark(q.type, j)}<span>${escapeHtml(option) || `<span class="muted">Seçenek ${j + 1}</span>`}</span></li>`).join('')}</ul>`
     : `<p class="question-preview">${PREVIEW[q.type]}</p>`;
   return `<article class="question-card fp-card is-preview" data-q="${index}" tabindex="0" role="button" aria-label="${index + 1}. soruyu düzenle">
+    ${DRAG_HANDLE}
     <p class="question-preview-title">${q.title ? escapeHtml(q.title) : '<span class="muted">Başlıksız soru</span>'}${q.required ? ' <b class="required">*</b>' : ''}</p>
     ${q.help ? `<p class="fill-help">${escapeHtml(q.help)}</p>` : ''}
     ${body}
@@ -525,6 +532,7 @@ function questionCard(q, index) {
       <li class="option-add">${optionMark(q.type, q.options.length)}<button type="button" data-act="add-option" title="Enter yeni seçenek açar; alt alta yazılmış bir listeyi yapıştırırsanız her satır ayrı seçenek olur.">Seçenek ekle</button></li></ol>`
     : `<p class="question-preview">${PREVIEW[q.type]}</p><p class="question-preview-note">Bu alanı formu dolduran il yöneticisi yazar; burada yalnızca yanıtın türü görünür.</p>`;
   return `<article class="question-card fp-card is-active" data-q="${index}">
+    ${DRAG_HANDLE}
     <div class="question-head">
       <input data-field="title" value="${escapeHtml(q.title)}" maxlength="500" placeholder="Soru" aria-label="${index + 1}. soru metni">
       <select data-field="type" aria-label="${index + 1}. soru türü"${answeredQ(q) ? ' disabled title="Bu soru yanıt aldı; türü değiştirilemez."' : ''}>${Object.entries(TYPES).map(([value, label]) => `<option value="${value}"${value === q.type ? ' selected' : ''}>${label}</option>`).join('')}</select>
@@ -583,6 +591,8 @@ $('#question-list').addEventListener('change', event => {
 /* Önizlenen karta tıklayınca (ya da Enter / boşluk) o kart düzenlenir. */
 const activate = card => renderQuestions([Number(card.dataset.q), '[data-field="title"]']);
 $('#question-list').addEventListener('click', event => {
+  /* Tutamak yalnızca sürükler; tıklanınca kartı açmaz. */
+  if (event.target.closest('[data-drag]')) return;
   const preview = event.target.closest('.is-preview');
   if (preview) return activate(preview);
   const button = event.target.closest('[data-act]');
@@ -595,8 +605,11 @@ $('#question-list').addEventListener('click', event => {
   if (act === 'remove-option') { q.options.splice(Number(button.dataset.index), 1); q.origins.splice(Number(button.dataset.index), 1); return renderQuestions([index, `[data-option="${Math.max(0, Number(button.dataset.index) - 1)}"]`]); }
   if (act === 'up' || act === 'down') {
     const to = act === 'up' ? index - 1 : index + 1;
+    const tops = [index, to].map(i => dragCards()[i].getBoundingClientRect().top);
     [list[index], list[to]] = [list[to], list[index]];
-    return renderQuestions([to, `[data-act="${act}"]:not(:disabled)`]);
+    renderQuestions([to, `[data-act="${act}"]:not(:disabled)`]);
+    slideFrom(dragCards()[to], tops[0]);
+    return slideFrom(dragCards()[index], tops[1]);
   }
   if (act === 'insert') { list.splice(index + 1, 0, blankQuestion(isSection(q) ? 'single' : q.type)); return renderQuestions([index + 1, '[data-field="title"]']); }
   if (act === 'insert-section') { list.splice(index + 1, 0, blankQuestion('section')); return renderQuestions([index + 1, '[data-field="title"]']); }
@@ -614,6 +627,81 @@ $('#question-list').addEventListener('click', event => {
     return renderQuestions([Math.min(index, list.length - 1), '[data-field="title"]']);
   }
 });
+
+/* Sürükleyerek sıralama. Fare ve dokunma aynı yoldan geçsin diye pointer
+   olayları kullanılır (HTML sürükle-bırak dokunmatik ekranda çalışmaz).
+   Tutulan kart imleci izler; üzerinden geçtiği kartlar ona yer açmak için
+   kayar. Sürükleme boyunca DOM sırası değişmez, kartlar yalnızca transform
+   ile oynar; sıra bırakınca değişir. `to` kartın ineceği sıradır. */
+let drag = null;
+const dragCards = () => $$('#question-list > [data-q]');
+const MOVE_MS = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 180;
+function endDrag() {
+  for (const card of dragCards()) { card.classList.remove('is-dragging', 'is-settling'); card.style.transform = ''; }
+  document.body.classList.remove('is-sorting');
+  drag = null;
+}
+$('#question-list').addEventListener('pointerdown', event => {
+  const handle = event.target.closest('[data-drag]');
+  if (!handle || event.button || drag) return;
+  event.preventDefault();
+  const cards = dragCards(), from = cardIndex(handle);
+  /* Kartların sürükleme başındaki yeri (sayfa koordinatı): kartlar kayarken
+     ölçülseydi, yer açan kartın ortası imlecin altından kaçar ve titrerdi. */
+  const boxes = cards.map(card => { const box = card.getBoundingClientRect(); return { top: box.top + scrollY, height: box.height }; });
+  const gap = cards.length > 1 ? boxes[1].top - boxes[0].top - boxes[0].height : 0;
+  drag = { from, to: from, cards, boxes, gap, startY: event.clientY + scrollY };
+  handle.setPointerCapture(event.pointerId);
+  cards[from].classList.add('is-dragging');
+  document.body.classList.add('is-sorting');
+});
+$('#question-list').addEventListener('pointermove', event => {
+  if (!drag || drag.settling) return;
+  const { from, cards, boxes, gap } = drag, y = event.clientY;
+  /* Kenara yaklaşınca sayfa kayar: uzun formda kart ekran dışına taşınabilsin. */
+  if (y < 130) scrollBy(0, -14); else if (y > innerHeight - 60) scrollBy(0, 14);
+  const pageY = y + scrollY, room = boxes[from].height + gap;
+  drag.to = from;
+  cards.forEach((card, i) => {
+    if (i === from) { card.style.transform = `translateY(${pageY - drag.startY}px) scale(1.02)`; return; }
+    const middle = boxes[i].top + boxes[i].height / 2;
+    const shift = i < from && pageY < middle ? room : i > from && pageY > middle ? -room : 0;
+    if (shift > 0) drag.to = Math.min(drag.to, i);
+    if (shift < 0) drag.to = Math.max(drag.to, i);
+    card.style.transform = shift ? `translateY(${shift}px)` : '';
+  });
+});
+$('#question-list').addEventListener('pointerup', () => {
+  if (!drag || drag.settling) return;
+  const { from, to, cards, boxes, gap } = drag;
+  /* Kart bırakıldığı yerden yeni yuvasına süzülür, sıra ondan sonra değişir. */
+  const between = (to < from ? boxes.slice(to, from) : boxes.slice(from + 1, to + 1)).reduce((sum, box) => sum + box.height + gap, 0);
+  drag.settling = true;
+  cards[from].classList.add('is-settling');
+  cards[from].style.transform = `translateY(${to < from ? -between : between}px)`;
+  setTimeout(() => {
+    endDrag();
+    if (to === from) return;
+    const list = draft.questions, selected = list[draft.active];
+    list.splice(to, 0, list.splice(from, 1)[0]);
+    /* Seçili kart aynı soru olarak kalır, yalnızca sırası değişir. */
+    draft.active = list.indexOf(selected);
+    dirty = true;
+    renderQuestions();
+  }, MOVE_MS);
+});
+$('#question-list').addEventListener('pointercancel', endDrag);
+
+/* Ok düğmesiyle taşımada iki kart yer değiştirirken kayar: yeniden çizimden
+   sonra kart eski yerine itilir, oradan yeni yerine bırakılır. */
+function slideFrom(card, oldTop) {
+  const delta = oldTop - card.getBoundingClientRect().top;
+  if (!delta || !MOVE_MS) return;
+  card.style.transition = 'none';
+  card.style.transform = `translateY(${delta}px)`;
+  card.getBoundingClientRect();
+  card.style.transition = card.style.transform = '';
+}
 
 /* Seçenek alanında Enter bir sonraki seçeneği açar; çok satırlı yapıştırma
    her satırı ayrı seçenek yapar (Excel'den ya da listeden kopyalama). */
