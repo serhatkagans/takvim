@@ -604,7 +604,7 @@ body.is-sorting { user-select: none; cursor: grabbing }
 .text-answers li { padding: 9px 12px; border-bottom: 1px solid var(--color-border); white-space: pre-line; font-size: .92rem }
 .text-answers li:last-child { border-bottom: 0 }
 .text-answers small { display: block; font-size: .76rem; color: var(--color-text-muted); font-weight: 600 }
-.table-scroll { overflow-x: auto; border: 1px solid var(--color-border); border-radius: 10px }
+.table-scroll { overflow-x: auto; border: 1px solid var(--color-border); border-radius: 10px; background: var(--color-surface); box-shadow: var(--shadow-sm) }
 .results-table { border-collapse: collapse; width: 100%; font-size: .86rem }
 .results-table th, .results-table td { padding: 9px 12px; border-bottom: 1px solid var(--color-border); text-align: left; vertical-align: top; min-width: 120px; max-width: 360px; white-space: pre-line }
 .results-table th { position: sticky; top: 0; background: var(--color-bg-subtle); font-family: var(--font-display); color: var(--color-text-strong); white-space: normal }
