@@ -36,7 +36,7 @@ const creator = (people, form) => { const person = people.find(p => p.id === for
  * ve takvimdeki hatırlatma bandını ondan çıkarır.
  */
 export function formRoutes({ db }) {
-  const formUsers = () => db.all('SELECT id,username,first_name,last_name,city FROM users ORDER BY city');
+  const formUsers = () => db.all('SELECT id,username,first_name,last_name,city FROM users WHERE deleted_at IS NULL AND passive_at IS NULL ORDER BY city');
 
   /**
    * Dosya sorusu yanıtını doğrular ve zenginleştirir: istemcinin gönderdiği

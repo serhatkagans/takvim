@@ -1,6 +1,6 @@
 import { ValidationError } from '../lib/data.mjs';
 import { openDb } from '../lib/db.mjs';
-import { listUsers, createUser, resetPassword, setCity, setName, removeUser } from '../lib/users.mjs';
+import { listUsers, createUser, resetPassword, setCity, setName, setPassive, removeUser } from '../lib/users.mjs';
 
 /**
  * Yönetici hesaplarını sunucu üzerinden yönetir.
@@ -18,6 +18,8 @@ const KULLANIM = `Kullanım:
   npm run user -- isim <kullanıcı> <ad> <soyad>        ad soyadı değiştirir
   npm run user -- parola <kullanıcı>        parolayı değiştirir, oturumlarını kapatır
   npm run user -- yetki <kullanıcı> [il]    yetki alanını değiştirir (il boşsa merkez)
+  npm run user -- pasif <kullanıcı>         pasife alır: giriş yapamaz, kaydı pasif listede durur
+  npm run user -- aktif <kullanıcı>         pasif hesabı yeniden açar
   npm run user -- sil <kullanıcı>
 
 Birden çok kelimeli ad tırnakla yazılır: "Ayşe Nur".
@@ -35,7 +37,7 @@ const db = await openDb();
 const bitir = async (message, code = 0) => { await db.close(); (code ? console.error : console.log)(message); process.exit(code); };
 const bul = async name => {
   /* Arama T.C. kuralını uygulamaz: kuraldan önce açılmış "admin" gibi hesaplar da yönetilebilsin. */
-  const row = await db.get('SELECT id FROM users WHERE username=?', [String(name).trim()]);
+  const row = await db.get('SELECT id FROM users WHERE username=? AND deleted_at IS NULL', [String(name).trim()]);
   if (!row) throw new ValidationError('Böyle bir kullanıcı yok.');
   return row;
 };
@@ -64,10 +66,14 @@ try {
     const area = await setCity(db, (await bul(username)).id, city);
     await bitir(`Yetki alanı güncellendi: ${area || 'merkez yöneticisi'}. Açık oturumları kapatıldı.`);
   }
+  if (command === 'pasif' || command === 'aktif') {
+    await setPassive(db, (await bul(username)).id, command === 'pasif');
+    await bitir(command === 'pasif' ? 'Hesap pasife alındı; açık oturumları kapatıldı.' : 'Hesap yeniden aktif.');
+  }
   if (command === 'sil') {
     const outcome = await removeUser(db, (await bul(username)).id);
     await bitir(outcome.disabled
-      ? `Hesap devre dışı bırakıldı. ${outcome.events} etkinlik kaydı bu hesaba bağlı olduğu için satır silinmedi.`
+      ? `Kullanıcı silindi. ${outcome.events} etkinlik kaydı adıyla birlikte takvimde kalır.`
       : 'Kullanıcı silindi.');
   }
   await bitir(KULLANIM, 1);

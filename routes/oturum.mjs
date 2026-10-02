@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { verifyPassword, hashPassword, checkPassword, ValidationError } from '../lib/data.mjs';
-import { listUsers, createUser, resetPassword, setCity, setName, removeUser, icsKey } from '../lib/users.mjs';
-import { send, body, digest, cookie, clientIp, tooManyAttempts, clearAttempts } from '../lib/http.mjs';
+import { listUsers, createUser, resetPassword, setCity, setName, setPassive, removeUser, icsKey, buildUserExcel } from '../lib/users.mjs';
+import { send, body, digest, cookie, clientIp, tooManyAttempts, clearAttempts, XLSX } from '../lib/http.mjs';
 import { SESSION_HOURS } from '../lib/ayar.mjs';
 
 /* Kullanıcı adı bilinmeyen girişte de parola doğrulaması çalışsın diye:
@@ -18,13 +18,14 @@ export function oturumRoutes({ db }) {
     const username = String(data.username || ''), ip = clientIp(req);
     if (tooManyAttempts([[`kullanici:${username}`, 10], [`adres:${ip}`, 30]]))
       return send(res, 429, { error: 'Çok fazla giriş denemesi. 15 dakika sonra tekrar deneyin.' });
-    const record = await db.get('SELECT id,username,password,city FROM users WHERE username=?', [username]);
+    const record = await db.get('SELECT id,username,password,city FROM users WHERE username=? AND deleted_at IS NULL AND passive_at IS NULL', [username]);
     const valid = verifyPassword(String(data.password || ''), record?.password || dummyHash);
     if (!record || !valid) return send(res, 401, { error: 'Kullanıcı adı veya parola hatalı.' });
     clearAttempts([`kullanici:${username}`, `adres:${ip}`]);
     const fresh = randomBytes(32).toString('hex'), now = Date.now();
     await db.run('DELETE FROM sessions WHERE expires<?', [now]);
     await db.run('INSERT INTO sessions(token,user_id,expires) VALUES(?,?,?)', [digest(fresh), record.id, now + SESSION_HOURS * 3600000]);
+    await db.run('UPDATE users SET last_login=? WHERE id=?', [new Date(now).toISOString(), record.id]);
     res.setHeader('Set-Cookie', cookie(fresh, SESSION_HOURS * 3600));
     return send(res, 200, { ok: true });
   }
@@ -43,17 +44,27 @@ export function oturumRoutes({ db }) {
   }
 
   /* ---- Kullanıcı yönetimi (yalnızca merkez yöneticisi) ---------------- */
-  async function users(req, res, user, target) {
+  async function users(req, res, url, user, target) {
     if (!user) return send(res, 401, { error: 'Önce giriş yapın.' });
     /* İl yöneticisi başka hesapları ne görebilir ne değiştirebilir. */
     if (user.city) return send(res, 403, { error: 'Kullanıcı yönetimi merkez yöneticisine aittir.' });
-    if (req.method === 'GET' && !target) return send(res, 200, (await listUsers(db)).map(row => ({ ...row, self: row.id === user.id })));
+    if (req.method === 'GET' && !target) {
+      /* ?bicim=xlsx&durum=aktif|pasif: koordinatör listesi Excel olarak iner. */
+      const format = url.searchParams.get('bicim'), state = url.searchParams.get('durum');
+      if (format === 'xlsx' && ['aktif', 'pasif'].includes(state)) {
+        const file = await buildUserExcel(db, { passive: state === 'pasif' });
+        res.writeHead(200, { 'Content-Type': XLSX, 'Content-Disposition': `attachment; filename="genctek-koordinatorler-${state}.xlsx"`, 'Content-Length': file.length });
+        return res.end(file);
+      }
+      if (format) return send(res, 400, { error: 'Geçersiz dosya biçimi.' });
+      return send(res, 200, (await listUsers(db)).map(row => ({ ...row, self: row.id === user.id })));
+    }
     if (req.method === 'POST' && !target) {
       const data = await body(req);
       return send(res, 201, await createUser(db, { username: data.username, firstName: data.firstName, lastName: data.lastName, city: data.city, password: data.password }));
     }
     if (target) {
-      if (!await db.get('SELECT 1 AS x FROM users WHERE id=?', [target])) return send(res, 404, { error: 'Kullanıcı bulunamadı.' });
+      if (!await db.get('SELECT 1 AS x FROM users WHERE id=? AND deleted_at IS NULL', [target])) return send(res, 404, { error: 'Kullanıcı bulunamadı.' });
       if (req.method === 'PUT') {
         const data = await body(req);
         /* Kendi hesabında yetki alanı değiştirilemez: merkez yöneticisi
@@ -62,6 +73,10 @@ export function oturumRoutes({ db }) {
         if ('firstName' in data || 'lastName' in data) await setName(db, target, data);
         if (typeof data.password === 'string' && data.password) await resetPassword(db, target, data.password);
         if ('city' in data) await setCity(db, target, data.city);
+        if ('passive' in data) {
+          if (target === user.id) throw new ValidationError('Kendi hesabınızı pasife alamazsınız.');
+          await setPassive(db, target, data.passive === true);
+        }
         return send(res, 200, { ok: true });
       }
       if (req.method === 'DELETE') {
@@ -91,6 +106,6 @@ export function oturumRoutes({ db }) {
     }
 
     const userPath = url.pathname.match(/^\/api\/users(?:\/(\d{1,9}))?$/);
-    if (userPath) return users(req, res, user, Number(userPath[1]));
+    if (userPath) return users(req, res, url, user, Number(userPath[1]));
   };
 }

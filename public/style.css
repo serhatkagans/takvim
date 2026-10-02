@@ -348,7 +348,9 @@ dialog.wide { width: min(860px, calc(100% - 32px)) }
 .user-row strong { display: block; color: var(--color-text-strong); font-family: var(--font-display) }
 .user-row small { display: block; color: var(--color-text-muted); font-size: .76rem }
 .user-row select { min-height: 38px; border: 1px solid var(--color-border-strong); border-radius: 6px; padding: 6px 8px; background: var(--color-surface); font-size: .85rem; width: 100% }
-.user-actions { display: flex; gap: 8px; justify-content: flex-end }
+.users-head { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: baseline; justify-content: space-between }
+.users-list + .users-head { margin-top: 22px }
+.user-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end }
 .user-actions button { min-height: 36px; padding: 6px 12px; font-size: .82rem; border-radius: 6px; border: 1px solid var(--color-border-strong); background: var(--color-surface); font-family: var(--font-display); font-weight: 600; cursor: pointer }
 .user-actions button:hover { border-color: var(--color-brand); color: var(--color-brand) }
 .user-actions .danger:hover { border-color: var(--color-danger); background: var(--color-danger); color: #fff }

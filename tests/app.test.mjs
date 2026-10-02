@@ -775,11 +775,49 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
     assert.equal((await request('/api/users/' + adminId, 'DELETE', null, cookie)).status, 400, 'kendi hesabını silemez');
     assert.equal((await request('/api/users/' + adminId, 'PUT', { city: 'Ankara' }, cookie)).status, 400, 'kendi yetkisini değiştiremez');
 
-    /* Etkinliği olan hesap silinmez, devre dışı bırakılır */
+    /* Pasife alma: giriş kapanır, kayıt pasif listede durur; aktife alınınca eski parola geçer */
+    const pasifOncesi = await login('10000000146', 'baska-parola-123');
+    assert.equal((await request('/api/users/' + adminId, 'PUT', { passive: true }, cookie)).status, 400, 'kendi hesabını pasife alamaz');
+    assert.equal((await request('/api/users/' + yeniId, 'PUT', { passive: true }, ilCookie)).status, 403);
+    assert.equal((await request('/api/users/' + yeniId, 'PUT', { passive: true }, cookie)).status, 200);
+    assert.equal((await (await request('/api/meta', 'GET', null, pasifOncesi)).json()).user, null, 'pasife alınanın oturumu düşer');
+    assert.equal((await request('/api/login', 'POST', { username: '10000000146', password: 'baska-parola-123' })).status, 401, 'pasif hesap giremez');
+    assert.ok((await (await request('/api/users', 'GET', null, cookie)).json()).find(p => p.id === yeniId).passive_at, 'pasif hesap listede işaretli durur');
+    assert.equal((await request('/api/users', 'POST', { username: '10000000146', firstName: 'Ali', lastName: 'Kaya', city: 'Bursa', password: 'yeni-parola-123' }, cookie)).status, 400, 'pasif hesabın numarasıyla yeni hesap açılmaz');
+    const sayfa = async durum => {
+      const yanit = await request('/api/users?bicim=xlsx&durum=' + durum, 'GET', null, cookie);
+      assert.equal(yanit.status, 200);
+      assert.match(yanit.headers.get('content-type'), /spreadsheetml\.sheet/);
+      assert.match(yanit.headers.get('content-disposition'), new RegExp(`genctek-koordinatorler-${durum}\\.xlsx`));
+      return unzip(Buffer.from(await yanit.arrayBuffer()))['xl/worksheets/sheet1.xml'].toString('utf8');
+    };
+    const pasifXml = await sayfa('pasif'), aktifXml = await sayfa('aktif');
+    const pasifKayit = (await (await request('/api/users', 'GET', null, cookie)).json()).find(p => p.id === yeniId);
+    assert.ok(pasifKayit.created_at && pasifKayit.last_login, 'kayıt ve son giriş tarihi tutulur');
+    assert.ok(pasifXml.includes('Sisteme kayıt tarihi') && pasifXml.includes('Son giriş tarihi'), 'tarih sütunları Excel\'de');
+    assert.ok(pasifXml.includes('DEMİR') && pasifXml.includes('10000000146') && pasifXml.includes('Pasife alınma tarihi'), 'pasif liste Excel\'de');
+    assert.ok(!aktifXml.includes('10000000146') && aktifXml.includes('admin'), 'aktif listede pasif hesap yok');
+    assert.equal((await request('/api/users?bicim=xlsx&durum=pasif', 'GET', null, ilCookie)).status, 403, 'il yöneticisi listeyi indiremez');
+    assert.equal((await request('/api/users?bicim=csv', 'GET', null, cookie)).status, 400);
+    assert.equal((await request('/api/users/' + yeniId, 'PUT', { passive: false }, cookie)).status, 200);
+
+    /* Etkinliği olan hesap silinince listeden düşer, giremez; etkinliği adıyla kalır */
+    const bursaYeni = await login('10000000146', 'baska-parola-123');
     const removed = await (await request('/api/users/' + yeniId, 'DELETE', null, cookie)).json();
     assert.equal(removed.disabled, true);
     assert.equal(removed.events, 1);
-    assert.equal((await (await request('/api/users', 'GET', null, cookie)).json()).length, 3, 'satır arşivde kalır');
+    assert.equal((await (await request('/api/users', 'GET', null, cookie)).json()).length, 2, 'silinen hesap listede görünmez');
+    assert.equal((await (await request('/api/meta', 'GET', null, bursaYeni)).json()).user, null, 'silinen hesabın oturumu düşer');
+    assert.equal((await request('/api/login', 'POST', { username: '10000000146', password: 'baska-parola-123' })).status, 401, 'silinen hesap giremez');
+    assert.equal((await request('/api/users/' + yeniId, 'PUT', { password: 'yine-parola-123' }, cookie)).status, 404, 'silinen hesaba parola verilemez');
+    const kalan = (await (await request('/api/events?tum=1', 'GET', null, cookie)).json()).filter(e => e.owner === yeniId);
+    assert.equal(kalan.length, 1, 'etkinliği takvimde kalır');
+    assert.match(JSON.stringify(kalan[0]), /Demir|DEMİR/, 'etkinlikte silinen kişinin adı görünür');
+    /* Aynı numarayla yeniden açılırsa eski satır geri gelir, etkinlik ona bağlı kalır */
+    const geri = await request('/api/users', 'POST', { username: '10000000146', firstName: 'Ayşe', lastName: 'Demir', city: 'Bursa', password: 'geri-parola-123' }, cookie);
+    assert.equal(geri.status, 201);
+    assert.equal((await geri.json()).id, yeniId);
+    assert.equal((await (await request('/api/users', 'GET', null, cookie)).json()).find(p => p.id === yeniId).events, 1);
 
     await request('/api/logout', 'POST', null, cookie);
     assert.equal((await request('/api/events', 'POST', sample, cookie)).status, 401);

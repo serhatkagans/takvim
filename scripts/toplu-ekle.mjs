@@ -24,7 +24,7 @@ for (const row of rows) {
   const city = cities.find(c => norm(c) === norm(row.il));
   try {
     if (!city) throw new Error(`il bulunamadı: ${row.il}`);
-    if (await db.get('SELECT 1 AS x FROM users WHERE username=?', [String(row.tc).trim()])) { skipped++; console.log(`atlandı (zaten kayıtlı): ${row.tc}`); continue; }
+    if (await db.get('SELECT 1 AS x FROM users WHERE username=? AND deleted_at IS NULL', [String(row.tc).trim()])) { skipped++; console.log(`atlandı (zaten kayıtlı): ${row.tc}`); continue; }
     await createUser(db, { username: row.tc, firstName: row.ad, lastName: row.soyad, city, password: row.parola });
     added++;
   } catch (error) {

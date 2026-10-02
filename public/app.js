@@ -895,15 +895,25 @@ function renderUsers() {
   const rows = query
     ? userRows.filter(row => [fullName(row), row.username, row.city || 'Merkez'].join(' ').toLocaleLowerCase('tr-TR').includes(query))
     : userRows;
-  $('#users-count').textContent = query ? `${rows.length} / ${userRows.length} hesap` : `${userRows.length} hesap`;
   const cityOptions = ['', ...[...meta.cities].sort((a, b) => a.localeCompare(b, 'tr'))];
-  $('#users-list').innerHTML = rows.length ? rows.map(row => `<div class="user-row" data-user="${row.id}">
-    <div><strong>${escapeHtml(fullName(row) || row.username)}</strong><small>${fullName(row) ? escapeHtml(row.username) + ' · ' : 'ad soyad girilmemiş · '}${row.events} etkinlik${row.sessions ? ' · oturumu açık' : ''}${row.self ? ' · bu hesap sizsiniz' : ''}</small></div>
-    <div>${row.self
-      ? `<span class="role-badge">Merkez yöneticisi</span>`
+  const day = iso => new Date(iso).toLocaleDateString('tr-TR');
+  const head = row => `<div><strong>${escapeHtml(fullName(row) || row.username)}</strong><small>${fullName(row) ? escapeHtml(row.username) + ' · ' : 'ad soyad girilmemiş · '}${row.events} etkinlik${row.sessions ? ' · oturumu açık' : ''}${row.self ? ' · bu hesap sizsiniz' : ''}${row.passive_at ? ' · ' + day(row.passive_at) + ' tarihinde pasife alındı' : ''}</small><small>${row.created_at ? 'Kayıt: ' + day(row.created_at) + ' · ' : ''}${row.last_login ? 'Son giriş: ' + day(row.last_login) : 'Henüz giriş yapmadı'}</small></div>`;
+  /* Aktif ve pasif hesaplar ayrı listelenir; pasif hesabın yetki alanı ve
+     parolası değiştirilmez, yalnızca aktife alınır ya da silinir. */
+  const draw = (list, counter, passive, empty) => {
+    const all = userRows.filter(row => !!row.passive_at === passive), shown = rows.filter(row => !!row.passive_at === passive);
+    $(counter).textContent = query ? `${shown.length} / ${all.length} hesap` : `${all.length} hesap`;
+    $(list).innerHTML = shown.length ? shown.map(row => `<div class="user-row" data-user="${row.id}">${head(row)}
+    <div>${row.self || passive
+      ? `<span class="role-badge">${row.city ? escapeHtml(row.city) : 'Merkez yöneticisi'}</span>`
       : `<select data-role="city" aria-label="${escapeHtml(row.username)} yetki alanı">${cityOptions.map(city => `<option value="${escapeHtml(city)}"${city === (row.city || '') ? ' selected' : ''}>${city ? escapeHtml(city) : 'Merkez (tüm iller)'}</option>`).join('')}</select>`}</div>
-    <div class="user-actions"><button type="button" data-role="rename">Ad soyad</button>${row.self ? '' : `<button type="button" data-role="reset">Parola ver</button><button type="button" class="danger" data-role="remove">Sil</button>`}</div>
-  </div>`).join('') : '<div class="user-row">Aramanızla eşleşen hesap yok.</div>';
+    <div class="user-actions">${passive
+      ? `<button type="button" data-role="activate">Aktife al</button><button type="button" class="danger" data-role="remove">Sil</button>`
+      : `<button type="button" data-role="rename">Ad soyad</button>${row.self ? '' : `<button type="button" data-role="reset">Parola ver</button><button type="button" data-role="passive">Pasife al</button><button type="button" class="danger" data-role="remove">Sil</button>`}`}</div>
+  </div>`).join('') : `<div class="user-row">${query ? 'Aramanızla eşleşen hesap yok.' : empty}</div>`;
+  };
+  draw('#users-list', '#users-count', false, 'Aktif hesap yok.');
+  draw('#users-passive-list', '#users-passive-count', true, 'Pasif hesap yok.');
 }
 
 $('#users-search').addEventListener('input', () => { if (userRows.length) renderUsers(); });
@@ -939,9 +949,16 @@ async function usersAction(target) {
       $('#reset-dialog').showModal();
       return;
     } else if (target.dataset.role === 'remove') {
-      if (!confirm(`${name} hesabı kaldırılsın mı? Bu hesapla açılmış etkinlikler takvimde kalır.`)) return;
+      if (!confirm(`${name} hesabı silinsin mi? Kişi artık giriş yapamaz; açtığı etkinlikler adıyla birlikte takvimde kalır.`)) return;
       const outcome = await api('api/users/' + id, { method: 'DELETE' });
-      $('#users-error').textContent = outcome.disabled ? `${name} devre dışı bırakıldı; ${[outcome.events && `${outcome.events} etkinlik kaydı`, outcome.responses && `${outcome.responses} form yanıtı`].filter(Boolean).join(' ve ')} bağlı olduğu için hesap satırı arşivde tutuldu.` : `${name} silindi.`;
+      $('#users-error').textContent = outcome.disabled ? `${name} silindi; ${[outcome.events && `${outcome.events} etkinlik kaydı`, outcome.responses && `${outcome.responses} form yanıtı`].filter(Boolean).join(' ve ')} adıyla birlikte duruyor.` : `${name} silindi.`;
+    } else if (target.dataset.role === 'passive') {
+      if (!confirm(`${name} pasife alınsın mı? Kişi giriş yapamaz; kaydı pasif hesaplar listesinde durur ve yeniden aktife alınabilir.`)) return;
+      await api('api/users/' + id, { method: 'PUT', body: JSON.stringify({ passive: true }) });
+      $('#users-error').textContent = `${name} pasife alındı; açık oturumları kapatıldı.`;
+    } else if (target.dataset.role === 'activate') {
+      await api('api/users/' + id, { method: 'PUT', body: JSON.stringify({ passive: false }) });
+      $('#users-error').textContent = `${name} yeniden aktif; eski parolasıyla giriş yapabilir.`;
     } else if (target.dataset.role === 'city') {
       await api('api/users/' + id, { method: 'PUT', body: JSON.stringify({ city: target.value }) });
       $('#users-error').textContent = `${name} için yetki alanı güncellendi; açık oturumları kapatıldı.`;
@@ -953,7 +970,7 @@ async function usersAction(target) {
 /* Tıklama yalnızca düğmeleri işler: açılır liste de tıklanınca "click" verdiği
    için, seçim yapılmadan yetki kaydediliyor ve liste yeniden çizilip açılan
    liste kapanıyordu. Yetki alanı yalnızca değer değişince kaydedilir. */
-$('#users-list').addEventListener('click', event => {
+for (const list of ['#users-list', '#users-passive-list']) $(list).addEventListener('click', event => {
   const button = event.target.closest('button[data-role]');
   if (button) usersAction(button);
 });
@@ -1002,9 +1019,10 @@ $('#users-button').onclick = async () => {
   form.reset();
   form.querySelector('.error').textContent = '';
   $('#users-search').value = '';
-  $('#users-count').textContent = '';
+  $('#users-count').textContent = $('#users-passive-count').textContent = '';
   $('#users-error').textContent = '';
   $('#users-list').innerHTML = '<div class="user-row">Yükleniyor…</div>';
+  $('#users-passive-list').innerHTML = '';
   $('#users-dialog').showModal();
   try { await loadUsers(); } catch (error) { $('#users-error').textContent = error.message; $('#users-list').innerHTML = ''; }
 };

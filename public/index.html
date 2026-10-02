@@ -173,9 +173,12 @@
   </form>
 
   <p id="users-error" class="error" role="alert"></p>
-  <p class="eyebrow">Mevcut hesaplar <small id="users-count"></small></p>
   <input id="users-search" type="search" placeholder="Ad, soyad, T.C. kimlik no veya il ara…" aria-label="Hesap ara">
+  <p class="eyebrow users-head"><span>Aktif hesaplar <small id="users-count"></small></span><a class="text-link" href="api/users?bicim=xlsx&amp;durum=aktif" download>Aktif listeyi indir (.xlsx)</a></p>
   <div id="users-list" class="users-list"></div>
+  <p class="eyebrow users-head"><span>Pasif hesaplar <small id="users-passive-count"></small></span><a class="text-link" href="api/users?bicim=xlsx&amp;durum=pasif" download>Pasif listeyi indir (.xlsx)</a></p>
+  <p class="hint">Görevden ayrılan kişi pasife alınır: giriş yapamaz ama kaydı burada durur ve yeniden aktife alınabilir.</p>
+  <div id="users-passive-list" class="users-list"></div>
 </dialog>
 
 <dialog id="rename-dialog">
