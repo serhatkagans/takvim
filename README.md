@@ -10,6 +10,7 @@ GençTek etkinliklerinin 81 il için planlandığı, giriş gerektiren takvim uy
 - ICS takvim aboneliği (`/takvim.ics?anahtar=…`); adres hesaba özel ve gizlidir, paneldeki "Takvimine ekle" kutusundan alınır ve yenilenebilir
 - Word, Excel ve fotoğraf arşivi (.zip) olarak faaliyet raporu
 - Formlar: merkez yöneticisi form hazırlar, il yöneticileri doldurur; yanıtlar özet, tablo ve Excel olarak (`formlar.html`)
+- Drive: Google Drive benzeri ortak dosya alanı (`drive.html`). Klasör ve dosyaları merkez yöneticileri yönetir; belirli hesaplarla, bütün il koordinatörleriyle ya da seçilen illerle toplu olarak, ya da bağlantıya sahip herkesle görüntüleyen / düzenleyen olarak paylaşılır. Klasörlere "Yükleyen" yetkisi verilebilir: il dosya yükler ama yalnızca kendi yüklediklerini görür; merkez "Teslim durumu"nda hangi ilin yüklediğini, hangisinin yüklemediğini görür. İl grubuna verilen yetki o ilde sonradan açılan hesapları da kapsar. Arama tür, sahip, tarih ve konuma göre süzülür
 
 ## Kurulum
 

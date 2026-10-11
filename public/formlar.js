@@ -1333,6 +1333,7 @@ async function init() {
   central = meta.user.central;
   $('#who').textContent = `${meta.user.name} · ${meta.user.city || 'Merkez yöneticisi'}`;
   $('#who').hidden = false;
+  $('#drive-button').hidden = false;
   showTab('summary');
   await route();
 }

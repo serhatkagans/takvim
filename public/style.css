@@ -710,3 +710,473 @@ body.is-sorting { user-select: none; cursor: grabbing }
 .question-card.is-archived .question-preview-title { color: var(--color-text-muted); text-decoration: line-through }
 .question-card.is-archived .text-link { justify-self: start }
 .summary-card.is-archived { border-style: dashed }
+
+/* --- Drive (drive.html) -------------------------------------------------
+   Google Drive düzeni: solda "Yeni" düğmesi ve bölümler, sağda beyaz ve
+   yuvarlak köşeli içerik alanı; liste ya da ızgara, seçili öğe vurgulu.
+   Formlar sayfasında olduğu gibi Google'ın mavisi yerine marka kırmızısı
+   vurgu rengidir. İçerik alanı sayfa değil kendi içinde kayar. */
+body.is-drive { background: #f8fafd; --gd-accent: var(--color-brand); --gd-sel: color-mix(in srgb, var(--color-brand) 13%, #fff); --gd-hover: #eef1f5; --gd-line: #e1e3e1; --gd-ink: #1f1f1f; --gd-soft: #444746 }
+.gd { display: grid; grid-template-columns: 256px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: calc(100vh - 72px); height: calc(100dvh - 72px); color: var(--gd-ink); font-size: .875rem; line-height: 1.4 }
+body.is-link .gd { grid-template-columns: minmax(0, 1fr) }
+body.is-link .gd:has(.gd-side:not([hidden])) { grid-template-columns: 256px minmax(0, 1fr) }
+.gd svg { fill: currentColor; flex: none }
+
+.gd-side { display: flex; flex-direction: column; gap: 4px; padding: 8px 16px 16px 28px; overflow-y: auto }
+.gd-new { display: inline-flex; align-items: center; gap: 12px; align-self: flex-start; height: 56px; padding: 0 20px 0 16px; margin: 8px 0 12px -12px; border: 0; border-radius: 16px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.3), 0 1px 3px 1px rgba(0,0,0,.15); font-weight: 600; font-size: .875rem; color: var(--gd-ink); cursor: pointer; transition: box-shadow 150ms, background 150ms }
+.gd-new:hover { background: #f5f7fa; box-shadow: 0 1px 3px rgba(0,0,0,.3), 0 4px 8px 3px rgba(0,0,0,.15) }
+.gd-new:disabled { opacity: .5; cursor: default; box-shadow: 0 1px 2px rgba(0,0,0,.2) }
+.gd-new svg { width: 24px; height: 24px; color: var(--gd-accent) }
+.gd-nav { display: grid; gap: 1px }
+.gd-nav > a { display: flex; align-items: center; gap: 14px; height: 32px; padding: 0 12px 0 16px; border-radius: 16px; color: var(--gd-ink); font-weight: 500 }
+.gd-nav > a:hover { background: var(--gd-hover) }
+.gd-nav > a.is-active { background: var(--gd-sel); font-weight: 700 }
+.gd-nav > a.is-drop { box-shadow: inset 0 0 0 2px var(--gd-accent) }
+.gd-nav svg { width: 20px; height: 20px; color: var(--gd-soft) }
+.gd-storage { margin: 16px 0 0 16px; padding-top: 12px; border-top: 1px solid var(--gd-line) }
+.gd-storage-bar { height: 4px; border-radius: 4px; background: var(--gd-line); overflow: hidden }
+.gd-storage-bar span { display: block; height: 100%; background: var(--gd-accent) }
+.gd-storage p { margin: 8px 0 0; color: var(--gd-soft); font-size: .8rem }
+
+.gd-main { position: relative; display: flex; flex-direction: column; min-width: 0; margin: 0 16px 16px 0; padding: 12px 16px 0 24px; background: #fff; border-radius: 16px }
+body.is-link .gd-main { margin-left: 16px }
+body.is-link .gd:has(.gd-side:not([hidden])) .gd-main { margin-left: 0 }
+.gd-search { display: flex; align-items: center; gap: 12px; max-width: 720px; height: 48px; padding: 0 16px; border-radius: 24px; background: #e9eef6; transition: background 150ms, box-shadow 150ms }
+.gd-search:focus-within { background: #fff; box-shadow: 0 1px 1px rgba(0,0,0,.1), 0 1px 3px 1px rgba(0,0,0,.12) }
+.gd-search svg { width: 24px; height: 24px; color: var(--gd-soft) }
+.gd-search input { flex: 1; min-width: 0; height: 100%; border: 0; background: none; font-size: 1rem; outline: none }
+.gd-search input:focus-visible { outline: none }
+.gd-search .gd-icon { margin-right: -8px }
+/* Arama süzgeçleri: Google Drive'daki çipler; seçili olan dolgulu. */
+.gd-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: -4px 0 12px }
+.gd-filter { height: 32px; max-width: 240px; padding: 0 28px 0 14px; border: 1px solid #747775; border-radius: 8px; background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M7 10l5 5 5-5z' fill='%23444746'/%3E%3C/svg%3E") no-repeat right 6px center / 18px; color: var(--gd-ink); font: 500 .875rem var(--font-body); appearance: none; cursor: pointer; text-overflow: ellipsis }
+.gd-filter:hover { background-color: var(--gd-hover) }
+.gd-filter.is-on { border-color: transparent; background-color: var(--gd-sel); font-weight: 700 }
+.gd-filter-count { margin-left: auto; color: var(--gd-soft); font-size: .8rem }
+/* Yükleyen olarak açılan klasörün üstündeki not. */
+.gd-notice { display: flex; align-items: flex-start; gap: 12px; margin: 0 0 12px; padding: 12px 16px; border-radius: 8px; background: #e8f0fe; color: #174ea6 }
+.gd-notice svg { width: 20px; height: 20px; flex: none; fill: currentColor }
+.gd-notice p { margin: 0; flex: 1 }
+.gd-notice .gd-text { height: 32px; margin: -6px -8px -6px 0; color: inherit }
+/* Teslim durumu penceresi */
+.gd-collect { width: min(720px, calc(100% - 32px)) !important }
+.gd-collect-filter { justify-self: start }
+.gd-segment.gd-collect-filter button { width: auto; padding: 0 14px; font: 500 .82rem var(--font-body) }
+.gd-collect-list { max-height: 50vh; overflow-y: auto; border: 1px solid var(--gd-line); border-radius: 8px }
+.gd-collect-row { display: grid; grid-template-columns: minmax(120px, 1.4fr) 60px 60px 80px minmax(130px, 1.4fr); gap: 8px; align-items: center; min-height: 36px; padding: 0 12px; border-top: 1px solid var(--gd-line); font-size: .85rem }
+.gd-collect-row:first-child { border-top: 0 }
+.gd-collect-row.is-head { position: sticky; top: 0; background: #f8fafd; color: var(--gd-soft); font-weight: 600; font-size: .78rem }
+.gd-collect-row span:first-child { display: flex; align-items: center; gap: 8px; font-weight: 600 }
+.gd-collect-row em { color: #b3261e; font-style: normal }
+.gd-collect-icon { width: 18px; height: 18px; flex: none; fill: #b3261e }
+.gd-collect-row.is-done .gd-collect-icon { fill: #188038 }
+@media (max-width: 560px) { .gd-collect-row { grid-template-columns: 1fr 50px 50px; } .gd-collect-row span:nth-child(n+4) { display: none } }
+
+.gd-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 64px; flex-wrap: wrap }
+.gd-crumbs { display: flex; align-items: center; gap: 2px; min-width: 0; flex-wrap: wrap }
+.gd-crumb { display: inline-flex; align-items: center; gap: 4px; margin: 0; padding: 4px 12px; border-radius: 16px; font: 400 1.375rem/1.4 var(--font-body); letter-spacing: 0; color: var(--gd-soft); white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis }
+a.gd-crumb:hover { background: var(--gd-hover); color: var(--gd-ink) }
+.gd-crumb.is-last { color: var(--gd-ink) }
+h1.gd-crumb.is-last:has(.gd-caret) { cursor: pointer }
+h1.gd-crumb.is-last:has(.gd-caret):hover { background: var(--gd-hover) }
+.gd-caret { width: 24px; height: 24px }
+.gd-crumb-sep { width: 24px; height: 24px; color: var(--gd-soft) }
+.gd-crumb.is-drop { background: var(--gd-sel); box-shadow: inset 0 0 0 2px var(--gd-accent) }
+.gd-viewtools { display: flex; align-items: center; gap: 12px }
+.gd-segment { display: inline-flex; border: 1px solid #747775; border-radius: 16px; overflow: hidden }
+.gd-segment button { display: grid; place-items: center; width: 52px; height: 32px; border: 0; background: none; cursor: pointer; color: var(--gd-soft) }
+.gd-segment button + button { border-left: 1px solid #747775 }
+.gd-segment button[aria-pressed="true"] { background: var(--gd-sel); color: var(--gd-ink) }
+.gd-segment svg { width: 18px; height: 18px }
+
+.gd-icon { display: inline-grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--gd-soft); cursor: pointer; flex: none }
+.gd-icon:hover { background: rgba(31,31,31,.08) }
+.gd-icon svg { width: 20px; height: 20px }
+.gd-pill { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 16px; border: 1px solid #747775; border-radius: 20px; background: #fff; color: var(--gd-accent); font-weight: 600; font-size: .875rem; cursor: pointer }
+.gd-pill:hover { background: color-mix(in srgb, var(--gd-accent) 6%, #fff) }
+.gd-pill svg { width: 18px; height: 18px }
+.gd-solid { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 24px; border: 0; border-radius: 20px; background: var(--gd-accent); color: #fff; font-weight: 600; font-size: .875rem; cursor: pointer }
+.gd-solid:hover { background: var(--color-brand-hover); box-shadow: 0 1px 2px rgba(0,0,0,.3) }
+.gd-solid:disabled { opacity: .45; cursor: default; box-shadow: none }
+.gd-solid svg { width: 18px; height: 18px }
+.gd-text { height: 40px; padding: 0 12px; border: 0; border-radius: 20px; background: none; color: var(--gd-accent); font-weight: 600; font-size: .875rem; cursor: pointer }
+.gd-text:hover { background: color-mix(in srgb, var(--gd-accent) 8%, #fff) }
+
+.gd-selbar { display: flex; align-items: center; gap: 4px; min-height: 40px; margin-bottom: 8px; padding: 0 4px; border-radius: 24px; background: #e9eef6 }
+.gd-selbar #sel-count { margin: 0 12px 0 4px; font-weight: 500 }
+.gd-selbar-tools { display: flex; align-items: center; gap: 2px }
+.gd-selbar .gd-icon { width: 36px; height: 36px }
+.gd-main > .error { margin-bottom: 8px }
+
+.gd-body { position: relative; flex: 1; overflow: auto; outline: none; padding-bottom: 48px; user-select: none; -webkit-user-select: none }
+.gd-marquee { position: absolute; z-index: 3; border: 1px solid var(--gd-accent); background: color-mix(in srgb, var(--gd-accent) 12%, transparent); pointer-events: none }
+
+/* Liste */
+.gd-row { display: grid; grid-template-columns: minmax(200px, 1fr) 150px 170px 120px 48px; align-items: center; min-height: 48px; padding: 0 0 0 12px; border-bottom: 1px solid var(--gd-line) }
+.has-location .gd-row { grid-template-columns: minmax(200px, 1fr) 140px 150px 110px 170px 48px }
+.gd-row > * { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--gd-soft) }
+.gd-row-head { position: sticky; top: 0; z-index: 2; min-height: 48px; background: #fff }
+.gd-row-head > * { color: var(--gd-ink); font-weight: 600; text-align: left }
+.gd-row-head button { display: inline-flex; align-items: center; gap: 4px; justify-self: start; height: 32px; padding: 0 8px 0 0; border: 0; background: none; cursor: pointer; font-size: .875rem }
+.gd-row-head button:hover { text-decoration: underline }
+.gd-sort { width: 18px; height: 18px }
+.gd-sort.is-down { transform: rotate(180deg) }
+.gd-item { cursor: default; outline: none }
+.gd-row.gd-item:hover { background: var(--gd-hover) }
+.gd-item.is-selected, .gd-row.gd-item.is-selected:hover, .gd-chip.is-selected:hover, .gd-card.is-selected:hover { background: var(--gd-sel) }
+.gd-item:focus-visible { box-shadow: inset 0 0 0 2px var(--gd-accent) }
+.gd-item.is-dragging { opacity: .45 }
+.gd-item.is-drop { box-shadow: inset 0 0 0 2px var(--gd-accent); background: var(--gd-sel) }
+.gd-col-name { display: flex; align-items: center; gap: 14px; color: var(--gd-ink) !important; font-weight: 500 }
+.gd-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.gd-col-date small { color: var(--gd-soft); font-size: .8rem }
+.gd-col-loc { display: flex; align-items: center; gap: 8px }
+.gd-loc-icon { width: 18px; height: 18px; color: var(--gd-soft); vertical-align: -4px }
+.gd-col-more { display: flex; justify-content: center; overflow: visible !important }
+.gd-col-more .gd-icon { width: 32px; height: 32px; opacity: 0 }
+.gd-item:hover .gd-col-more .gd-icon, .gd-item.is-selected .gd-col-more .gd-icon, .gd-col-more .gd-icon:focus-visible { opacity: 1 }
+.gd-ficon { width: 20px; height: 20px }
+.gd-ficon.is-folder { color: var(--gd-soft) }
+.gd-badge { display: inline-flex; color: var(--gd-soft) }
+.gd-badge svg { width: 16px; height: 16px }
+.gd-badge.is-star { color: #f4b400 }
+
+/* Izgara */
+.gd-group { margin: 12px 0; font: 600 .875rem/1.4 var(--font-body); letter-spacing: 0; color: var(--gd-ink) }
+.gd-chips { display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: 16px; margin-bottom: 16px }
+.gd-chip { display: flex; align-items: center; gap: 14px; height: 48px; padding: 0 4px 0 16px; border-radius: 12px; background: #f0f4f9; font-weight: 500 }
+.gd-chip:hover { background: #e1e5ea }
+.gd-chip .gd-name { flex: 1 }
+.gd-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(212px, 1fr)); gap: 16px }
+.gd-card { display: grid; gap: 4px; padding: 4px 4px 12px; border-radius: 12px; background: #f0f4f9 }
+.gd-card:hover { background: #e1e5ea }
+.gd-card-top { display: flex; align-items: center; gap: 12px; height: 44px; padding-left: 12px; font-weight: 500; min-width: 0 }
+.gd-card-top .gd-name { flex: 1 }
+.gd-thumb { display: grid; place-items: center; aspect-ratio: 1.25; margin: 0 8px; border-radius: 8px; background: #fff; overflow: hidden }
+.gd-thumb img { width: 100%; height: 100%; object-fit: cover; pointer-events: none }
+.gd-thumb-icon { width: 64px; height: 64px }
+.gd-thumb-icon.is-folder { color: var(--gd-soft) }
+.gd-card-meta { margin: 4px 12px 0; color: var(--gd-soft); font-size: .78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+
+.gd-empty { display: grid; justify-items: center; gap: 4px; padding: 72px 16px; text-align: center; color: var(--gd-soft) }
+.gd-empty h2 { margin: 12px 0 0; font: 400 1.375rem/1.3 var(--font-body); letter-spacing: 0; color: var(--gd-ink) }
+.gd-empty p { margin: 0 }
+.gd-empty-icon { width: 96px; height: 96px; color: #c4c7c5 }
+
+/* Bilgisayardan dosya bırakma katmanı */
+.gd-drop { position: absolute; inset: 0; z-index: 6; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 32px; border: 2px solid var(--gd-accent); border-radius: 16px; background: color-mix(in srgb, var(--gd-accent) 7%, transparent); pointer-events: none }
+.gd-drop p { margin: 0; padding: 12px 20px; border-radius: 24px; background: var(--gd-accent); color: #fff; font-weight: 600; box-shadow: var(--shadow-md) }
+.gd-ghost { position: fixed; top: -1000px; left: 0; display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-radius: 8px; background: var(--gd-accent); color: #fff; font: 600 .875rem var(--font-body) }
+.gd-ghost svg { width: 20px; height: 20px; fill: #fff }
+
+/* Menü */
+.gd-menu { position: fixed; z-index: 60; min-width: 248px; max-width: 320px; padding: 8px 0; border-radius: 8px; background: #fff; box-shadow: 0 2px 6px 2px rgba(0,0,0,.15), 0 1px 2px rgba(0,0,0,.3); font-size: .875rem; color: var(--gd-ink) }
+.gd-menu button { display: flex; align-items: center; gap: 16px; width: 100%; height: 36px; padding: 0 20px 0 16px; border: 0; background: none; text-align: left; cursor: pointer; outline: none }
+.gd-menu button:hover, .gd-menu button:focus-visible { background: var(--gd-hover) }
+.gd-menu svg { width: 20px; height: 20px; fill: var(--gd-soft) }
+.gd-menu hr { margin: 8px 0; border: 0; border-top: 1px solid var(--gd-line) }
+
+/* Pencereler (Google'ın 28 px köşeli pencereleri) */
+dialog.gd-dialog { width: min(480px, calc(100% - 32px)); padding: 24px; border: 0; border-radius: 28px; background: #fff; color: var(--gd-ink); font-size: .875rem; box-shadow: 0 4px 8px 3px rgba(0,0,0,.15), 0 1px 3px rgba(0,0,0,.3) }
+dialog.gd-dialog::backdrop { background: rgba(0,0,0,.4) }
+dialog.gd-dialog form { display: grid; gap: 16px }
+dialog.gd-dialog h2 { display: flex; align-items: center; gap: 12px; margin: 0; font: 400 1.5rem/1.3 var(--font-body); letter-spacing: 0; color: var(--gd-ink); overflow-wrap: anywhere }
+dialog.gd-dialog h2 svg { width: 24px; height: 24px; fill: currentColor; flex: none }
+dialog.gd-dialog h3 { margin: 4px 0 -4px; font: 600 1rem/1.4 var(--font-body); letter-spacing: 0 }
+dialog.gd-dialog input { width: 100%; min-height: 48px; padding: 8px 14px; border: 1px solid #747775; border-radius: 4px; font-size: 1rem }
+dialog.gd-dialog input:focus { border-color: var(--gd-accent); box-shadow: inset 0 0 0 1px var(--gd-accent); outline: none }
+dialog.gd-dialog p { margin: 0 }
+dialog.gd-dialog svg { fill: currentColor }
+.gd-dialog-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px }
+.gd-share { width: min(560px, calc(100% - 32px)) !important }
+.gd-access { display: flex; align-items: center; gap: 14px }
+.gd-access-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: #e3e3e3; color: var(--gd-soft); flex: none }
+.gd-access-icon.is-open { background: color-mix(in srgb, var(--color-success) 18%, #fff); color: var(--color-success) }
+.gd-access-icon svg { width: 20px; height: 20px }
+.gd-access-text { display: grid; gap: 2px; flex: 1; min-width: 0 }
+.gd-access-text small { color: var(--gd-soft); font-size: .8rem }
+.gd-access select { justify-self: start; height: 32px; padding: 0 8px; margin-left: -8px; border: 0; border-radius: 4px; background: none; font-weight: 600; font-size: .875rem; cursor: pointer }
+.gd-access select:hover { background: var(--gd-hover) }
+.gd-share-actions { justify-content: space-between; margin-top: 8px }
+.gd-move { width: min(520px, calc(100% - 32px)) !important }
+.gd-move-now { color: var(--gd-soft) }
+.gd-move-now svg { width: 18px; height: 18px; vertical-align: -4px }
+.gd-move-head { display: flex; align-items: center; gap: 8px; min-height: 40px; border-bottom: 1px solid var(--gd-line); padding-bottom: 8px }
+.gd-move-head strong { font-size: 1rem; font-weight: 600 }
+.gd-move-list { list-style: none; margin: 0; padding: 0; height: 280px; overflow-y: auto }
+.gd-move-list li { display: flex; align-items: center; gap: 14px; height: 44px; padding: 0 4px 0 12px; border-radius: 8px; cursor: pointer }
+.gd-move-list li span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.gd-move-list li:hover { background: var(--gd-hover) }
+.gd-move-list li.is-picked { background: var(--gd-sel) }
+.gd-move-list li.gd-move-empty { justify-content: center; height: 120px; color: var(--gd-soft); cursor: default; background: none }
+.gd-move-list .gd-icon { width: 32px; height: 32px }
+.gd-move-list .gd-ficon { color: var(--gd-soft) }
+
+/* Önizleme */
+body.is-previewing { overflow: hidden }
+.gd-preview { position: fixed; inset: 0; z-index: 80; display: grid; grid-template-rows: 64px minmax(0, 1fr); background: rgba(0,0,0,.9); color: #fff }
+.gd-preview svg { fill: currentColor }
+.gd-preview-bar { display: flex; align-items: center; gap: 12px; padding: 0 12px; background: linear-gradient(rgba(0,0,0,.6), rgba(0,0,0,0)) }
+.gd-preview-bar .gd-icon { color: #fff }
+.gd-preview-bar .gd-icon:hover { background: rgba(255,255,255,.14) }
+.gd-preview-bar strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; font-size: 1rem }
+.gd-preview-tools { display: flex; gap: 4px }
+#preview-icon { display: inline-flex }
+#preview-icon .gd-ficon.is-folder { color: #fff }
+.gd-preview-stage { display: grid; place-items: center; min-height: 0; padding: 0 72px 24px; overflow: auto }
+.gd-preview-stage img { max-width: 100%; max-height: calc(100vh - 100px); object-fit: contain; box-shadow: 0 8px 30px rgba(0,0,0,.5) }
+.gd-preview-stage iframe { width: min(1000px, 100%); height: calc(100vh - 96px); border: 0; background: #fff }
+.gd-preview-stage video { max-width: 100%; max-height: calc(100vh - 100px) }
+.gd-preview-nav { position: fixed; top: 50%; z-index: 81; display: grid; place-items: center; width: 48px; height: 48px; margin-top: -24px; border: 0; border-radius: 50%; background: rgba(0,0,0,.55); color: #fff; cursor: pointer }
+.gd-preview-nav:hover { background: rgba(0,0,0,.8) }
+.gd-preview-nav svg { width: 28px; height: 28px }
+.gd-preview-nav.is-prev { left: 12px }
+.gd-preview-nav.is-next { right: 12px }
+.gd-noprev { display: grid; justify-items: center; gap: 16px; padding: 40px 48px; border-radius: 16px; background: #3c4043; color: #fff; text-align: center }
+.gd-noprev p { margin: 0 }
+.gd-noprev-icon { width: 72px; height: 72px }
+.gd-audio { display: grid; justify-items: center; gap: 24px }
+.gd-text-prev { width: min(900px, 100%); max-height: calc(100vh - 110px); margin: 0; padding: 24px 28px; overflow: auto; background: #fff; color: var(--gd-ink); font: .85rem/1.5 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text }
+
+/* Bağlantı bir dosyaysa: tek dosya sayfası */
+.gd-filepage { padding: 8px 0 0 }
+.gd-filecard { display: grid; gap: 16px }
+.gd-filecard-head { display: flex; align-items: center; gap: 16px }
+.gd-filecard-head .gd-ficon { width: 40px; height: 40px }
+.gd-filecard-head h2 { margin: 0; font: 400 1.5rem/1.3 var(--font-body); letter-spacing: 0; color: var(--gd-ink); overflow-wrap: anywhere }
+.gd-filecard-head p { margin: 2px 0 0; color: var(--gd-soft) }
+.gd-filecard-tools { display: flex; gap: 8px; flex-wrap: wrap }
+.gd-filecard-stage { display: grid; place-items: center; min-height: 360px; padding: 16px; border-radius: 12px; background: #3c4043; user-select: text }
+.gd-filecard-stage img { max-width: 100%; max-height: 70vh; object-fit: contain }
+.gd-filecard-stage iframe { width: 100%; height: 75vh; border: 0; background: #fff }
+.gd-filecard-stage video { max-width: 100%; max-height: 70vh }
+.gd-filecard-stage .gd-text-prev { max-height: 70vh }
+
+/* Yüklemeler ve bildirim */
+.gd-uploads { position: fixed; right: 24px; bottom: 0; z-index: 70; width: min(360px, calc(100% - 32px)); border-radius: 16px 16px 0 0; background: #fff; box-shadow: 0 4px 8px 3px rgba(0,0,0,.15), 0 1px 3px rgba(0,0,0,.3); overflow: hidden; font-size: .875rem; color: #1f1f1f }
+.gd-uploads svg { fill: currentColor }
+.gd-uploads-head { display: flex; align-items: center; gap: 4px; height: 52px; padding: 0 8px 0 20px; background: #f0f4f9 }
+.gd-uploads-head strong { flex: 1; font-weight: 600; font-size: .95rem }
+.gd-uploads.is-collapsed #uploads-list { display: none }
+.gd-uploads.is-collapsed #uploads-toggle svg { transform: rotate(180deg) }
+#uploads-list { list-style: none; margin: 0; padding: 4px 0; max-height: 260px; overflow-y: auto }
+#uploads-list li { display: flex; align-items: center; gap: 14px; height: 48px; padding: 0 16px 0 20px }
+.gd-up-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.gd-up-state { display: grid; place-items: center; width: 24px; height: 24px }
+.gd-ring { width: 24px; height: 24px; transform: rotate(-90deg) }
+.gd-ring circle { fill: none !important; stroke: #e1e3e1; stroke-width: 4 }
+.gd-ring .gd-ring-fill { stroke: var(--color-brand); stroke-dasharray: 94.2; stroke-dashoffset: 94.2; transition: stroke-dashoffset 150ms }
+.gd-up-ok { width: 22px; height: 22px; fill: var(--color-success) !important }
+.gd-up-err { width: 22px; height: 22px; fill: var(--color-danger) !important }
+.gd-toast { position: fixed; left: 24px; bottom: 24px; z-index: 90; display: flex; align-items: center; gap: 16px; max-width: min(560px, calc(100% - 48px)); min-height: 48px; padding: 8px 8px 8px 16px; border-radius: 4px; background: #313033; color: #f2f2f2; font-size: .875rem; box-shadow: 0 2px 6px 2px rgba(0,0,0,.15) }
+.gd-toast.is-error { background: #601410 }
+.gd-toast button { height: 36px; padding: 0 12px; border: 0; border-radius: 4px; background: none; color: #ffb4ab; font-weight: 700; cursor: pointer }
+.gd-toast button:hover { background: rgba(255,255,255,.08) }
+
+@media (max-width: 900px) {
+  .gd, body.is-link .gd:has(.gd-side:not([hidden])) { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) }
+  body.is-link .gd { grid-template-rows: minmax(0, 1fr) }
+  .gd-side { flex-direction: row; align-items: center; gap: 8px; padding: 8px 16px; overflow-x: auto; overflow-y: hidden }
+  .gd-new { height: 44px; margin: 0; flex: none }
+  .gd-nav { display: flex; gap: 4px }
+  .gd-nav > a { white-space: nowrap; padding: 0 12px }
+  .gd-storage { display: none }
+  .gd-main, body.is-link .gd-main, body.is-link .gd:has(.gd-side:not([hidden])) .gd-main { margin: 0 8px 8px; padding: 8px 12px 0 }
+  .gd-row, .has-location .gd-row { grid-template-columns: minmax(0, 1fr) 96px 44px }
+  .gd-col-owner, .gd-col-size, .gd-col-loc { display: none !important }
+  .gd-col-more .gd-icon { opacity: 1 }
+  .gd-crumb { font-size: 1.125rem; max-width: 200px }
+  .gd-preview-stage { padding: 0 8px 16px }
+  .gd-preview-nav { display: none }
+  .gd-toast { left: 16px; bottom: 16px }
+  .gd-uploads { right: 16px }
+}
+
+/* Drive: kenar çubuğundaki klasör ağacı ve kişi paylaşımı */
+.gd-nav-row { position: relative; display: flex; align-items: center }
+.gd-nav-row > a { flex: 1; display: flex; align-items: center; gap: 14px; height: 32px; padding: 0 12px 0 16px; border-radius: 16px; color: var(--gd-ink); font-weight: 500 }
+.gd-nav-row > a:hover { background: var(--gd-hover) }
+.gd-nav-row > a.is-active { background: var(--gd-sel); font-weight: 700 }
+.gd-nav-row > a.is-drop { box-shadow: inset 0 0 0 2px var(--gd-accent) }
+.gd-nav-row > .gd-tree-toggle { position: absolute; left: -24px; z-index: 1 }
+.gd-tree-toggle { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--gd-soft); cursor: pointer; flex: none }
+.gd-tree-toggle:hover { background: rgba(31,31,31,.08) }
+.gd-tree-toggle svg { width: 20px; height: 20px; transition: transform 120ms }
+.gd-tree-toggle[aria-expanded="true"] svg, [aria-expanded="true"] > .gd-tree-row > .gd-tree-toggle svg { transform: rotate(90deg) }
+.gd-tree, .gd-tree ul { list-style: none; margin: 0; padding: 0 }
+.gd-tree { margin-bottom: 4px }
+.gd-tree-row { display: flex; align-items: center; height: 32px; border-radius: 16px }
+.gd-tree-row:hover { background: var(--gd-hover) }
+.gd-tree-row.is-active { background: var(--gd-sel); font-weight: 700 }
+.gd-tree-row.is-drop { box-shadow: inset 0 0 0 2px var(--gd-accent); background: var(--gd-sel) }
+.gd-tree-row a { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; height: 100%; padding-right: 12px; color: var(--gd-ink) }
+.gd-tree-row a span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.gd-tree-row a svg { width: 18px; height: 18px; color: var(--gd-soft) }
+.gd-tree-space { width: 24px; flex: none }
+.gd-tree-empty { padding: 4px 0 4px 44px; color: var(--gd-soft); font-size: .8rem }
+
+.gd-people-add { position: relative; display: flex; gap: 8px }
+.gd-people-add input { flex: 1 }
+.gd-people-add select { height: 48px; padding: 0 10px; border: 1px solid #747775; border-radius: 4px; background: #fff; font-size: .875rem }
+.gd-suggest { position: absolute; top: 52px; left: 0; right: 0; z-index: 5; list-style: none; margin: 0; padding: 8px 0; max-height: 280px; overflow-y: auto; border-radius: 8px; background: #fff; box-shadow: 0 2px 6px 2px rgba(0,0,0,.15), 0 1px 2px rgba(0,0,0,.3) }
+.gd-suggest li[data-add] { display: flex; align-items: center; gap: 12px; padding: 6px 16px; cursor: pointer; outline: none }
+.gd-suggest li[data-add]:hover, .gd-suggest li[data-add]:focus { background: var(--gd-hover) }
+.gd-people { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 240px; overflow-y: auto }
+.gd-people li { display: flex; align-items: center; gap: 12px; min-height: 48px }
+.gd-people select { height: 32px; padding: 0 6px; border: 0; border-radius: 4px; background: none; font-size: .875rem; cursor: pointer }
+.gd-people select:hover { background: var(--gd-hover) }
+.gd-avatar { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: color-mix(in srgb, var(--gd-accent) 18%, #fff); color: var(--gd-accent); font-weight: 700; flex: none }
+.gd-person { display: grid; flex: 1; min-width: 0 }
+.gd-person b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.gd-person small { color: var(--gd-soft); font-size: .78rem }
+.gd-person-role { padding-right: 8px; color: var(--gd-soft) }
+.gd-people-note { padding: 8px 16px; color: var(--gd-soft) }
+@media (max-width: 900px) { .gd-tree, .gd-nav-row > .gd-tree-toggle { display: none } .gd-nav-row > a { white-space: nowrap } }
+/* Seçim çubuğu boşken de yerini korur: seçim yapılınca liste kaymaz (Google'daki gibi). */
+.gd-selbar[hidden] { display: flex !important; visibility: hidden }
+/* Takvimin genel dialog kuralları (tam genişlik alanlar) Drive pencerelerinde geçersiz. */
+dialog.gd-dialog select { width: auto; min-height: 0 }
+dialog.gd-dialog .gd-people-add input { flex: 1 1 auto; width: auto; min-width: 0 }
+dialog.gd-dialog .gd-people-add select { height: 48px; min-height: 48px }
+/* Toplu paylaşım paneli ve "Yükleyen" açıklaması */
+.gd-bulk-toggle { display: block; margin: 4px 0 0 -12px }
+.gd-bulk { display: grid; gap: 10px; margin-top: 4px; padding: 12px 16px; border: 1px solid var(--gd-line); border-radius: 8px; background: #f8fafd }
+.gd-bulk .gd-radios { display: grid; gap: 6px }
+.gd-bulk-cities { display: grid; gap: 6px }
+.gd-bulk-tools { display: flex; align-items: center; gap: 4px; flex-wrap: wrap }
+dialog.gd-dialog .gd-bulk-tools input { flex: 1 1 140px; width: auto; min-width: 0; min-height: 36px; height: 36px; font-size: .875rem }
+.gd-bulk-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 2px 12px; max-height: 180px; overflow-y: auto; padding: 4px; border-radius: 4px; background: #fff }
+.gd-bulk-list label { display: flex; align-items: center; gap: 6px; min-height: 28px; cursor: pointer }
+dialog.gd-dialog .gd-bulk-list input { width: 18px; height: 18px; min-height: 0; margin: 0; padding: 0; accent-color: var(--gd-accent) }
+.gd-bulk-list small, #bulk-count, .gd-bulk-note { color: var(--gd-soft); font-size: .78rem }
+.gd-bulk-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap }
+dialog.gd-dialog .gd-bulk-actions select { height: 40px; min-height: 40px; margin-right: auto; padding: 0 10px; border: 1px solid #747775; border-radius: 4px; background: #fff; font-size: .875rem }
+.gd-bulk-actions .gd-text:disabled { opacity: .45; cursor: default; background: none }
+.gd-role-help { margin: 4px 0 0; padding: 8px 12px; border-radius: 8px; background: #e8f0fe; color: #174ea6; font-size: .8rem }
+
+/* Drive: Word ve Excel önizlemesi (office.js). Word beyaz A4 sayfası olarak
+   koyu zeminde kayar; Excel ızgarası Google E-Tablolar'daki gibi başlık
+   satırı / sütunu sabit, altta sayfa sekmeleri. */
+.gd-office { width: min(1200px, 100%); height: calc(100vh - 96px); display: flex; flex-direction: column; color: #1f1f1f; user-select: text; -webkit-user-select: text }
+.gd-filecard-stage .gd-office { height: 75vh }
+.gd-office-wait { color: #e8eaed; font-size: 1rem }
+.gd-filecard-stage .gd-office-wait { color: #fff }
+.gd-doc { flex: 1; overflow: auto; padding: 8px 0 32px }
+.gd-doc-page { box-sizing: border-box; width: min(794px, calc(100% - 16px)); min-height: 1123px; margin: 0 auto; padding: 72px 76px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.35); font: 11pt/1.4 Calibri, Carlito, "Segoe UI", Arial, sans-serif; color: #000; white-space: pre-wrap; overflow-wrap: anywhere; tab-size: 4 }
+.gd-doc-page p, .gd-doc-page h1, .gd-doc-page h2, .gd-doc-page h3, .gd-doc-page h4, .gd-doc-page h5, .gd-doc-page h6 { margin: 0 0 8px; letter-spacing: 0; text-wrap: wrap; color: inherit; font-family: inherit }
+.gd-doc-page h1 { font-size: 20pt; font-weight: 400; color: #2f5496 } .gd-doc-page h2 { font-size: 16pt; font-weight: 400; color: #2f5496 } .gd-doc-page h3 { font-size: 13pt; font-weight: 400; color: #1f3763 }
+.gd-doc-page h4, .gd-doc-page h5, .gd-doc-page h6 { font-size: 11pt; font-weight: 700; color: #2f5496 }
+.gd-doc-li { position: relative; margin-bottom: 2px !important }
+.gd-doc-marker { display: inline-block; min-width: 22px; margin-left: -22px }
+.gd-doc-page img { max-width: 100%; height: auto; vertical-align: middle }
+.gd-doc-page a { color: #0563c1; text-decoration: underline }
+.gd-doc-table { width: 100%; margin: 4px 0 10px; border-collapse: collapse; white-space: normal }
+.gd-doc-table td { padding: 4px 7px; border: 1px solid #000; vertical-align: top }
+.gd-doc-table td p { margin: 0 }
+.gd-doc-break { margin: 24px -76px; border: 0; border-top: 8px solid #3c4043 }
+
+.gd-office.is-sheet { background: #fff; border-radius: 4px; overflow: hidden }
+.gd-sheet { flex: 1; min-height: 0; display: flex; flex-direction: column }
+.gd-sheet-grid { flex: 1; overflow: auto }
+.gd-sheet-table { border-collapse: separate; border-spacing: 0; table-layout: fixed; font: 13px/1.3 Arial, "Segoe UI", sans-serif; color: #000 }
+.gd-sheet-table td { height: 21px; padding: 2px 4px; border-right: 1px solid #e2e3e3; border-bottom: 1px solid #e2e3e3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom }
+.gd-sheet-table td.is-number { text-align: right }
+.gd-sheet-table th { position: sticky; z-index: 1; padding: 2px 4px; border-right: 1px solid #c7c7c7; border-bottom: 1px solid #c7c7c7; background: #f8f9fa; color: #5f6368; font-weight: 400; font-size: 11px; text-align: center }
+.gd-sheet-table thead th { top: 0; z-index: 2 }
+.gd-sheet-table tbody th { left: 0 }
+.gd-sheet-table thead th.gd-sheet-corner { left: 0; z-index: 3 }
+.gd-sheet-tabs { display: flex; gap: 2px; padding: 0 8px; overflow-x: auto; border-top: 1px solid #dadce0; background: #f8f9fa; flex: none }
+.gd-sheet-tabs button { height: 36px; padding: 0 16px; border: 0; background: none; color: #444746; font: 500 .85rem var(--font-body); white-space: nowrap; cursor: pointer }
+.gd-sheet-tabs button:hover { background: #e8eaed }
+.gd-sheet-tabs button[aria-pressed="true"] { background: #fff; color: #188038; box-shadow: inset 0 -3px 0 #188038 }
+.gd-sheet-more { margin: 12px; color: #5f6368 }
+@media (max-width: 900px) { .gd-doc-page { padding: 28px 22px; min-height: 0 } .gd-doc-break { margin: 16px -22px } }
+.gd-office.is-doc { width: 100% }
+.gd-doc-page h1.gd-doc-title { font-size: 26pt; font-weight: 300; color: #000; margin-bottom: 12px }
+.gd-radios { display: grid; gap: 4px }
+.gd-radios label { display: flex; align-items: center; gap: 12px; min-height: 40px; cursor: pointer; font-size: .9rem }
+dialog.gd-dialog .gd-radios input { width: 20px; min-height: 0; height: 20px; margin: 0; accent-color: var(--gd-accent) }
+
+/* Drive: Ayrıntılar paneli (ⓘ) — Google Drive'daki sağ panel */
+.gd-split { flex: 1; min-height: 0; display: flex; gap: 16px }
+.gd-split > .gd-body { flex: 1 1 auto; min-width: 0 }
+#details-toggle[aria-pressed="true"] { background: var(--gd-sel); color: var(--gd-ink) }
+.gd-details { width: 340px; flex: none; overflow-y: auto; padding: 4px 4px 24px 16px; border-left: 1px solid var(--gd-line); color: var(--gd-ink) }
+.gd-details-head { display: flex; align-items: center; gap: 12px; min-height: 48px }
+.gd-details-head h2 { flex: 1; min-width: 0; margin: 0; font: 400 1.05rem/1.3 var(--font-body); letter-spacing: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.gd-details-head .gd-ficon { width: 22px; height: 22px }
+.gd-details-thumb { display: grid; place-items: center; width: 100%; height: 210px; margin: 8px 0 20px; padding: 0; border: 0; border-radius: 12px; background: #f0f4f9; overflow: hidden; cursor: pointer; position: relative }
+.gd-details-thumb img { width: 100%; height: 100%; object-fit: contain }
+.gd-details-thumb video { width: 100%; height: 100%; object-fit: cover; pointer-events: none }
+.gd-details-thumb iframe { width: 100%; height: 100%; border: 0; background: #fff; pointer-events: none }
+.gd-details-thumb pre { align-self: start; justify-self: stretch; margin: 0; padding: 12px 14px; height: 100%; overflow: hidden; background: #fff; text-align: left; font: .7rem/1.4 ui-monospace, Consolas, monospace; white-space: pre-wrap; color: #333 }
+.gd-details-thumb.is-icon { cursor: default }
+.gd-details-big { width: 72px; height: 72px; color: #c4c7c5 }
+.gd-details-big.is-folder { color: var(--gd-soft) }
+/* Word / Excel küçük görüntüsü: tam boy çizilip ölçeklenir, tıklama önizlemeye gider. */
+.gd-details-mini { position: absolute; top: 6px; left: 50%; width: 1000px; height: 700px; transform: translateX(-50%) scale(.31); transform-origin: top center; pointer-events: none }
+.gd-details-mini .gd-office { width: 1000px; height: 700px }
+.gd-details-mini .gd-doc { overflow: hidden; padding: 0 }
+.gd-details-mini .gd-doc-page { min-height: 0; box-shadow: none }
+.gd-details-mini .gd-sheet-grid { overflow: hidden }
+.gd-details-mini .gd-sheet-tabs { display: none }
+.gd-details section { padding: 16px 0; border-top: 1px solid var(--gd-line) }
+.gd-details h3 { margin: 0 0 12px; font: 600 .95rem/1.3 var(--font-body); letter-spacing: 0; color: var(--gd-ink) }
+.gd-details-access { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; color: var(--gd-soft) }
+.gd-details-list { display: grid; gap: 14px; margin: 0 }
+.gd-details-list dt { font-size: .78rem; color: var(--gd-soft) }
+.gd-details-list dd { margin: 2px 0 0; overflow-wrap: anywhere }
+.gd-details-list dt + dd { margin-top: -12px }
+.gd-details-place { display: inline-flex; align-items: center; gap: 8px; padding: 4px 10px 4px 6px; border: 1px solid #747775; border-radius: 8px; color: var(--gd-ink) }
+.gd-details-place:hover { background: var(--gd-hover) }
+.gd-details-empty { display: grid; justify-items: center; gap: 12px; padding: 48px 12px; text-align: center; color: var(--gd-soft) }
+.gd-details-empty p { margin: 0 }
+@media (max-width: 1100px) { .gd-details { position: fixed; top: 72px; right: 0; bottom: 0; z-index: 30; width: min(360px, 100%); padding: 8px 16px 24px; background: #fff; border-left: 0; box-shadow: -4px 0 16px rgba(0,0,0,.15) } }
+
+/* Yükleme satırı: gönderilirken üstüne gelince iptal, hata ya da iptalde yeniden dene */
+#uploads-list .gd-up-act { width: 32px; height: 32px; margin-right: -8px }
+#uploads-list li:not(.is-failed):not(.is-cancelled) .gd-up-act { display: none }
+#uploads-list li:not(.is-failed):not(.is-cancelled):hover .gd-up-act:not([hidden]) { display: inline-grid }
+#uploads-list li:not(.is-failed):not(.is-cancelled):hover:has(.gd-up-act:not([hidden])) .gd-up-state { display: none }
+#uploads-list li.is-cancelled .gd-up-name { color: #5f6368 }
+#uploads-list .gd-up-state small { color: #5f6368; white-space: nowrap; font-size: .75rem }
+#uploads-list li .gd-up-state:has(small) { width: auto }
+
+/* Paylaş: bağlantı bitiş tarihi ve yenileme */
+.gd-link-extra { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-left: 50px }
+.gd-expiry { display: grid; gap: 4px; font-size: .82rem; color: var(--gd-soft) }
+.gd-expiry span { font-weight: 600; color: var(--gd-ink) }
+dialog.gd-dialog .gd-expiry input { width: 180px; min-height: 40px; font-size: .9rem }
+.gd-expiry small { font-size: .75rem }
+
+/* Sürüm geçmişi */
+.gd-versions { width: min(600px, calc(100% - 32px)) !important }
+.gd-versions-note { color: var(--gd-soft); font-size: .85rem }
+.gd-versions-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 360px; overflow-y: auto }
+.gd-versions-list li { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 0 4px; border-radius: 8px }
+.gd-versions-list li:hover { background: var(--gd-hover) }
+.gd-versions-list em { font-style: normal; font-weight: 700; color: var(--color-success) }
+.gd-version-icon { display: inline-flex }
+.gd-version-tools { display: flex; align-items: center; gap: 2px; flex: none }
+.gd-version-tools .gd-icon { width: 36px; height: 36px }
+
+/* Ayrıntılar paneli: sekmeler ve Etkinlik */
+.gd-details-tabs { display: flex; border-bottom: 1px solid var(--gd-line); margin: 0 0 12px }
+.gd-details-tabs button { flex: 1; position: relative; height: 40px; border: 0; background: none; color: var(--gd-soft); font: 600 .85rem var(--font-body); cursor: pointer }
+.gd-details-tabs button:hover { color: var(--gd-ink); background: var(--gd-hover) }
+.gd-details-tabs button[aria-selected="true"] { color: var(--gd-accent) }
+.gd-details-tabs button[aria-selected="true"]::after { content: ""; position: absolute; left: 16px; right: 16px; bottom: -1px; height: 3px; border-radius: 3px 3px 0 0; background: var(--gd-accent) }
+.gd-activity h4 { margin: 14px 0 6px; font: 600 .8rem var(--font-body); color: var(--gd-soft) }
+.gd-activity h4:first-child { margin-top: 4px }
+.gd-activity-entry { display: flex; gap: 12px; padding: 8px 0 }
+.gd-activity-entry > div { min-width: 0; display: grid; gap: 4px }
+.gd-activity-entry p { margin: 0; overflow-wrap: anywhere; line-height: 1.4 }
+.gd-activity-entry small { color: var(--gd-soft); font-size: .75rem }
+.gd-avatar.is-link { background: #e8eaed; color: var(--gd-soft) }
+.gd-avatar svg { width: 16px; height: 16px; fill: currentColor }
+.gd-activity-item { display: inline-flex; align-items: center; gap: 8px; justify-self: start; max-width: 100%; padding: 4px 10px 4px 6px; border: 1px solid var(--gd-line); border-radius: 8px; color: var(--gd-ink); font-size: .82rem }
+.gd-activity-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.gd-activity-item .gd-ficon { width: 16px; height: 16px }
+a.gd-activity-item:hover { background: var(--gd-hover) }
+.gd-activity-item.is-gone span { text-decoration: line-through; color: var(--gd-soft) }
+.gd-activity > .gd-text { margin-top: 8px }

@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Drive · GençTek</title>
+<link rel="icon" href="genctek.png">
+<link rel="stylesheet" href="style.css">
+<script src="office.js" defer></script>
+<script src="drive.js" defer></script>
+</head>
+<body class="is-drive">
+
+<header class="site-header">
+  <div class="container header-inner">
+    <a class="brand" href="./" aria-label="GençTek Etkinlik Takvimi"><span class="brand-mark"><img src="genctek.png" alt=""></span><span>GENÇ<span class="brand-accent">TEK</span> <small>Drive</small></span></a>
+    <div class="header-right">
+      <span id="who" class="who" hidden></span>
+      <a id="calendar-link" class="button button-ghost" href="./" hidden>Takvime dön</a>
+      <a id="forms-link" class="button button-ghost" href="formlar.html" hidden>Formlar</a>
+      <a id="drive-link" class="button button-ghost" href="drive.html" hidden>Drive'ım</a>
+      <a id="login-link" class="button button-ghost" href="./" hidden>Giriş yap</a>
+      <button id="logout-button" class="button button-ghost" hidden>Çıkış yap</button>
+    </div>
+  </div>
+</header>
+
+<!-- Görünümler adres çubuğundaki # ile seçilir (drive.js → route):
+     #                 Drive'ım (kök)
+     #klasor/12        klasör
+     #son #yildizli #paylasilan #cop
+     #ara?q=metin&tur=pdf&sahip=3&tarih=hafta&konum=12   arama ve süzgeçleri
+     #b/ANAHTAR[/12]   paylaşım bağlantısı (oturum gerekmez) -->
+<main class="gd" id="drive">
+  <aside class="gd-side" id="side">
+    <button type="button" id="new-button" class="gd-new" aria-haspopup="menu">
+      <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M20 13h-7v7h-2v-7H4v-2h7V4h2v7h7v2z"/></svg>
+      <span>Yeni</span>
+    </button>
+    <nav class="gd-nav" aria-label="Drive bölümleri">
+      <!-- Drive'ım (il hesabında "Benimle paylaşılanlar"): yanındaki ok klasör ağacını açar. -->
+      <div class="gd-nav-row">
+        <button type="button" class="gd-tree-toggle" id="tree-toggle" aria-expanded="false" title="Klasörleri göster"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 17l5-5-5-5v10z"/></svg></button>
+        <a href="#" data-nav="root" data-drop="root"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 2H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h4l3 3 3-3h4a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zm-7 3.3a2.7 2.7 0 1 1 0 5.4 2.7 2.7 0 0 1 0-5.4zM18 16H6v-.9c0-2 4-3.1 6-3.1s6 1.1 6 3.1v.9z"/></svg><span id="root-label">Drive'ım</span></a>
+      </div>
+      <ul class="gd-tree" id="tree" role="tree" aria-label="Klasörler" hidden></ul>
+      <a href="#son" data-nav="son"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7V7z"/></svg>Son kullanılanlar</a>
+      <a href="#yildizli" data-nav="yildizli"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m22 9.2-7.2-.6L12 2 9.2 8.6 2 9.2l5.5 4.7L5.8 21 12 17.3l6.2 3.7-1.6-7.1L22 9.2zM12 15.4l-3.8 2.3 1-4.3-3.3-2.9 4.4-.4L12 6.1l1.7 4 4.4.4-3.3 2.9 1 4.3-3.8-2.3z"/></svg>Yıldızlı</a>
+      <a href="#paylasilan" data-nav="paylasilan"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 13.8c-2.3 0-7 1.2-7 3.5V20h14v-2.7c0-2.3-4.7-3.5-7-3.5zM9 12a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zm7.1 1.9c1.2.9 1.9 2 1.9 3.4V20h4v-2.7c0-1.8-3.1-2.9-5.9-3.4zM15 12a3.5 3.5 0 0 0 0-7c-.4 0-.7.1-1 .2a5.4 5.4 0 0 1 0 6.6c.3.1.6.2 1 .2z"/></svg>Paylaştıklarım</a>
+      <a href="#cop" data-nav="cop"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4V3H9v1H4v2h1v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6h1V4h-5zm2 15H7V6h10v13zM9 8h2v9H9V8zm4 0h2v9h-2V8z"/></svg>Çöp kutusu</a>
+    </nav>
+    <div class="gd-storage" id="storage">
+      <div class="gd-storage-bar"><span id="storage-fill"></span></div>
+      <p id="storage-text"></p>
+    </div>
+  </aside>
+
+  <section class="gd-main" id="main" aria-live="polite">
+    <form class="gd-search" id="search-form" role="search">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 19 15 13.6a6.5 6.5 0 1 0-1.4 1.4l5.4 5.5 1.5-1.5zM5 9.5a4.5 4.5 0 1 1 9 0 4.5 4.5 0 0 1-9 0z"/></svg>
+      <input id="search" type="search" placeholder="Drive'da arayın" aria-label="Drive'da arayın" maxlength="100" autocomplete="off">
+      <button type="button" class="gd-icon" id="search-tune" title="Arama seçenekleri" aria-label="Arama seçenekleri"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/></svg></button>
+    </form>
+
+    <div class="gd-head">
+      <nav class="gd-crumbs" id="crumbs" aria-label="Konum"></nav>
+      <div class="gd-viewtools">
+        <button type="button" id="empty-trash" class="gd-pill" hidden>Çöp kutusunu boşalt</button>
+        <div class="gd-segment" role="group" aria-label="Görünüm">
+          <button type="button" data-layout="list" aria-pressed="true" title="Liste düzeni"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18v2H3V5zm0 6h18v2H3v-2zm0 6h18v2H3v-2z"/></svg><span class="visually-hidden">Liste</span></button>
+          <button type="button" data-layout="grid" aria-pressed="false" title="Izgara düzeni"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h8v8H3V3zm2 2v4h4V5H5zm8-2h8v8h-8V3zm2 2v4h4V5h-4zM3 13h8v8H3v-8zm2 2v4h4v-4H5zm8-2h8v8h-8v-8zm2 2v4h4v-4h-4z"/></svg><span class="visually-hidden">Izgara</span></button>
+        </div>
+        <button type="button" class="gd-icon" id="details-toggle" aria-pressed="false" title="Ayrıntıları göster / gizle"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 7h2v2h-2V7zm0 4h2v6h-2v-6zm1-9a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 18a8 8 0 1 1 0-16 8 8 0 0 1 0 16z"/></svg></button>
+      </div>
+    </div>
+
+    <!-- Arama süzgeçleri: tür, sahip, değiştirilme tarihi, konum (drive.js → renderFilters) -->
+    <div class="gd-filters" id="filters" role="group" aria-label="Arama süzgeçleri" hidden></div>
+
+    <!-- Seçim varken araç çubuğu (Google Drive'daki gibi başlığın altında) -->
+    <div class="gd-selbar" id="selbar" hidden>
+      <button type="button" class="gd-icon" data-sel="clear" title="Seçimi kaldır"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 6.4 17.6 5 12 10.6 6.4 5 5 6.4l5.6 5.6L5 17.6 6.4 19l5.6-5.6 5.6 5.6 1.4-1.4-5.6-5.6z"/></svg></button>
+      <span id="sel-count"></span>
+      <span class="gd-selbar-tools" id="sel-tools"></span>
+    </div>
+
+    <p id="page-error" class="error" role="alert"></p>
+    <div id="notice" class="gd-notice" hidden></div>
+
+    <!-- Liste ve sağda Ayrıntılar paneli (ⓘ) yan yana -->
+    <div class="gd-split">
+      <div class="gd-body" id="body" tabindex="-1">
+        <div id="file-page" class="gd-filepage" hidden></div>
+        <div id="listing"></div>
+        <div id="marquee" class="gd-marquee" hidden></div>
+      </div>
+      <aside class="gd-details" id="details" aria-label="Ayrıntılar" hidden></aside>
+    </div>
+    <div class="gd-drop" id="drop" hidden><p id="drop-text">Dosyaları buraya bırakın</p></div>
+  </section>
+</main>
+
+<!-- Sağ tık / ⋮ menüsü ve "Yeni" menüsü -->
+<div id="menu" class="gd-menu" role="menu" hidden></div>
+
+<input type="file" id="file-input" multiple hidden>
+<input type="file" id="folder-input" webkitdirectory multiple hidden>
+<input type="file" id="version-input" hidden>
+
+<!-- Ad sorma: yeni klasör / yeniden adlandır -->
+<dialog id="name-dialog" class="gd-dialog">
+  <form method="dialog" id="name-form">
+    <h2 id="name-title">Yeni klasör</h2>
+    <input id="name-input" maxlength="200" required autocomplete="off" aria-labelledby="name-title">
+    <p class="error" id="name-error" role="alert"></p>
+    <div class="gd-dialog-actions">
+      <button type="button" class="gd-text" value="cancel" data-close>İptal</button>
+      <button type="submit" class="gd-text is-primary" id="name-submit">Oluştur</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Paylaşım -->
+<dialog id="share-dialog" class="gd-dialog gd-share">
+  <form method="dialog" id="share-form">
+    <h2 id="share-title">Paylaş</h2>
+    <!-- Kişi ekleme: sistemdeki il hesapları; Google'daki "Kişi ekleyin" kutusu -->
+    <div class="gd-people-add">
+      <input id="people-search" type="search" placeholder="Kişi ekleyin (ad ya da il)" autocomplete="off" aria-label="Kişi ekleyin" aria-controls="people-suggest">
+      <select id="people-role" aria-label="Eklenecek kişinin yetkisi"></select>
+      <ul id="people-suggest" class="gd-suggest" role="listbox" hidden></ul>
+    </div>
+    <!-- Toplu paylaşım: bütün il koordinatörleri ya da seçilen iller -->
+    <button type="button" class="gd-text gd-bulk-toggle" id="bulk-toggle" aria-expanded="false" aria-controls="bulk" hidden>İl koordinatörleriyle toplu paylaş</button>
+    <div class="gd-bulk" id="bulk" hidden>
+      <div class="gd-radios">
+        <label><input type="radio" name="bulk-scope" value="all" checked> <span id="bulk-all-label">Bütün il koordinatörleri</span></label>
+        <label><input type="radio" name="bulk-scope" value="cities"> <span>Seçilen iller</span></label>
+      </div>
+      <div class="gd-bulk-cities" id="bulk-cities-box" hidden>
+        <div class="gd-bulk-tools">
+          <input type="search" id="bulk-filter" placeholder="İl ara" autocomplete="off" aria-label="İl ara">
+          <button type="button" class="gd-text" data-bulk="pick">Görünenleri seç</button>
+          <button type="button" class="gd-text" data-bulk="clear">Temizle</button>
+        </div>
+        <div class="gd-bulk-list" id="bulk-cities"></div>
+        <small id="bulk-count"></small>
+      </div>
+      <div class="gd-bulk-actions">
+        <select id="bulk-role" aria-label="Verilecek yetki"></select>
+        <button type="button" class="gd-text" id="bulk-remove" data-bulk="remove">Erişimlerini kaldır</button>
+        <button type="button" class="gd-solid" id="bulk-add" data-bulk="add">Ekle</button>
+      </div>
+      <small class="gd-bulk-note">Yetki ile verilir: o ilde sonradan açılan hesaplar da kendiliğinden erişir. Daha güçlü bir yetki varsa düşürülmez.</small>
+    </div>
+    <p class="gd-role-help" id="role-help" hidden><b>Yükleyen:</b> klasöre dosya ve klasör yükler; içeride yalnızca kendi yüklediklerini görür ve düzenler. Başkalarının yüklediklerini göremez — iller birbirinin dosyasını görmez.</p>
+    <h3>Erişimi olan kişiler</h3>
+    <ul class="gd-people" id="people-list"></ul>
+    <h3>Genel erişim</h3>
+    <div class="gd-access">
+      <span class="gd-access-icon" id="share-icon"></span>
+      <div class="gd-access-text">
+        <select id="share-mode" aria-label="Genel erişim">
+          <option value="restricted">Kısıtlı</option>
+          <option value="anyone">Bağlantıya sahip olan herkes</option>
+        </select>
+        <small id="share-help"></small>
+      </div>
+      <select id="share-role" aria-label="Bağlantının yetkisi" hidden>
+        <option value="viewer">Görüntüleyen</option>
+        <option value="editor">Düzenleyen</option>
+      </select>
+    </div>
+    <!-- Bağlantı açıkken: bitiş tarihi ve eski bağlantıyı öldüren yenileme -->
+    <div class="gd-link-extra" id="share-extra" hidden>
+      <label class="gd-expiry">
+        <span>Bağlantının bitiş tarihi</span>
+        <input type="date" id="share-expires" min="2000-01-01" max="2099-12-31">
+        <small>Boş bırakılırsa süresizdir. Seçilen günün sonuna kadar geçerlidir.</small>
+      </label>
+      <button type="button" class="gd-text" id="share-renew">Bağlantıyı yenile</button>
+    </div>
+    <p class="error" id="share-error" role="alert"></p>
+    <div class="gd-dialog-actions gd-share-actions">
+      <button type="button" class="gd-pill" id="share-copy"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.9 12a3.1 3.1 0 0 1 3.1-3.1h4V7H7a5 5 0 0 0 0 10h4v-1.9H7A3.1 3.1 0 0 1 3.9 12zM8 13h8v-2H8v2zm9-6h-4v1.9h4a3.1 3.1 0 0 1 0 6.2h-4V17h4a5 5 0 0 0 0-10z"/></svg>Bağlantıyı kopyala</button>
+      <button type="submit" class="gd-solid">Bitti</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Taşıma: klasör ağacında gezinip hedef seçilir -->
+<dialog id="move-dialog" class="gd-dialog gd-move">
+  <form method="dialog" id="move-form">
+    <h2 id="move-title">Taşı</h2>
+    <p class="gd-move-now" id="move-now"></p>
+    <div class="gd-move-head">
+      <button type="button" class="gd-icon" id="move-up" title="Üst klasör"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11H7.8l5.6-5.6L12 4l-8 8 8 8 1.4-1.4L7.8 13H20v-2z"/></svg></button>
+      <strong id="move-where"></strong>
+    </div>
+    <ul class="gd-move-list" id="move-list" role="listbox" aria-label="Klasörler"></ul>
+    <p class="error" id="move-error" role="alert"></p>
+    <div class="gd-dialog-actions">
+      <button type="button" class="gd-text" data-close>İptal</button>
+      <button type="submit" class="gd-solid" id="move-submit">Taşı</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Teslim durumu: yükleme klasörüne hangi il kaç dosya yükledi -->
+<dialog id="collect-dialog" class="gd-dialog gd-collect">
+  <form method="dialog">
+    <h2 id="collect-title">Teslim durumu</h2>
+    <p class="gd-versions-note" id="collect-summary"></p>
+    <div class="gd-segment gd-collect-filter" role="group" aria-label="Gösterilecek iller" id="collect-filter">
+      <button type="button" data-collect="missing" aria-pressed="true">Yüklemeyenler</button>
+      <button type="button" data-collect="done" aria-pressed="false">Yükleyenler</button>
+      <button type="button" data-collect="all" aria-pressed="false">Hepsi</button>
+    </div>
+    <div class="gd-collect-list" id="collect-list"></div>
+    <p class="error" id="collect-error" role="alert"></p>
+    <div class="gd-dialog-actions gd-share-actions">
+      <button type="button" class="gd-pill" id="collect-copy">Yüklemeyen illeri kopyala</button>
+      <button type="submit" class="gd-text is-primary">Kapat</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Sürüm geçmişi: Google Drive'daki "Sürümleri yönet" -->
+<dialog id="versions-dialog" class="gd-dialog gd-versions">
+  <form method="dialog">
+    <h2 id="versions-title">Sürümleri yönet</h2>
+    <p class="gd-versions-note" id="versions-note"></p>
+    <ul class="gd-versions-list" id="versions-list"></ul>
+    <p class="error" id="versions-error" role="alert"></p>
+    <div class="gd-dialog-actions gd-share-actions">
+      <button type="button" class="gd-pill" id="versions-upload">Yeni sürüm yükle</button>
+      <button type="submit" class="gd-text is-primary">Kapat</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Aynı adlı dosya yüklenirken: Google Drive'daki "Yükleme seçenekleri" -->
+<dialog id="conflict-dialog" class="gd-dialog">
+  <form method="dialog">
+    <h2>Yükleme seçenekleri</h2>
+    <p id="conflict-text"></p>
+    <div class="gd-radios">
+      <label><input type="radio" name="conflict" value="replace" checked> <span id="conflict-replace-label">Mevcut dosyayı değiştir</span></label>
+      <label><input type="radio" name="conflict" value="keep"> <span id="conflict-keep-label">Her iki dosyayı da ayrı tut</span></label>
+    </div>
+    <div class="gd-dialog-actions">
+      <button type="submit" class="gd-text" value="cancel">İptal</button>
+      <button type="submit" class="gd-text is-primary" value="ok">Yükle</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Onay: kalıcı silme / çöpü boşaltma -->
+<dialog id="confirm-dialog" class="gd-dialog">
+  <form method="dialog">
+    <h2 id="confirm-title"></h2>
+    <p id="confirm-text"></p>
+    <div class="gd-dialog-actions">
+      <button type="submit" class="gd-text" value="cancel">İptal</button>
+      <button type="submit" class="gd-text is-primary" value="ok" id="confirm-ok"></button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Önizleme (tam ekran, Google Drive'daki koyu katman) -->
+<div id="preview" class="gd-preview" hidden role="dialog" aria-modal="true" aria-labelledby="preview-name">
+  <div class="gd-preview-bar">
+    <button type="button" class="gd-icon" data-preview="close" title="Kapat (Esc)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11H7.8l5.6-5.6L12 4l-8 8 8 8 1.4-1.4L7.8 13H20v-2z"/></svg></button>
+    <span id="preview-icon"></span>
+    <strong id="preview-name"></strong>
+    <span class="gd-preview-tools">
+      <button type="button" class="gd-icon" data-preview="share" title="Paylaş" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 13.8c-2.3 0-7 1.2-7 3.5V20h14v-2.7c0-2.3-4.7-3.5-7-3.5zM9 12a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zm7.1 1.9c1.2.9 1.9 2 1.9 3.4V20h4v-2.7c0-1.8-3.1-2.9-5.9-3.4zM15 12a3.5 3.5 0 0 0 0-7c-.4 0-.7.1-1 .2a5.4 5.4 0 0 1 0 6.6c.3.1.6.2 1 .2z"/></svg></button>
+      <a class="gd-icon" data-preview="download" title="İndir" href="#"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12v7H5v-7H3v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2zm-6 .7 2.6-2.6L17 11.5 12 16.5l-5-5 1.4-1.4 2.6 2.6V3h2v9.7z"/></svg></a>
+    </span>
+  </div>
+  <button type="button" class="gd-preview-nav is-prev" data-preview="prev" title="Önceki"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.4 7.4 14 6l-6 6 6 6 1.4-1.4L10.8 12z"/></svg></button>
+  <div class="gd-preview-stage" id="preview-stage"></div>
+  <button type="button" class="gd-preview-nav is-next" data-preview="next" title="Sonraki"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 8.6 7.4l4.6 4.6-4.6 4.6L10 18l6-6z"/></svg></button>
+</div>
+
+<!-- Yüklemeler (sağ alt) ve bildirim (sol alt) -->
+<div id="uploads" class="gd-uploads" hidden>
+  <div class="gd-uploads-head">
+    <strong id="uploads-title"></strong>
+    <button type="button" class="gd-icon" id="uploads-toggle" title="Küçült"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.4 8.6 12 13.2l4.6-4.6L18 10l-6 6-6-6z"/></svg></button>
+    <button type="button" class="gd-icon" id="uploads-close" title="Kapat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 6.4 17.6 5 12 10.6 6.4 5 5 6.4l5.6 5.6L5 17.6 6.4 19l5.6-5.6 5.6 5.6 1.4-1.4-5.6-5.6z"/></svg></button>
+  </div>
+  <ul id="uploads-list"></ul>
+</div>
+<div id="toast" class="gd-toast" role="status" hidden><span id="toast-text"></span><button type="button" id="toast-undo" hidden>Geri al</button></div>
+
+</body>
+</html>

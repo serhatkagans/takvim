@@ -828,3 +828,362 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
     try { rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }); } catch {}
   }
 });
+
+const db_user_id = async (origin, cookie, username) => (await (await fetch(origin + '/api/users', { headers: { Cookie: cookie } })).json()).find(u => u.username === username).id;
+
+/* Drive: merkez yöneticisi yönetir, bağlantıya sahip olan kişi paylaşımın
+   verdiği kadar görür / düzenler (bkz. lib/drive.mjs, routes/drive.mjs). */
+for (const backend of backends) test(`Drive uçtan uca (${backend.name}): yetki, bağlantı paylaşımı, taşıma, çöp kutusu, ZIP`, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'takvim-drive-'));
+  let child;
+  try {
+    if (backend.url) {
+      const { default: pg } = await import('pg');
+      const client = new pg.Client({ connectionString: backend.url });
+      await client.connect();
+      await client.query('DROP TABLE IF EXISTS drive_log, drive_versions, drive_groups, drive_members, drive_stars, drive_items, form_files, form_reminders, form_drafts, form_images, form_responses, forms, event_files, photos, sessions, events, users');
+      await client.end();
+    }
+    let db = await openDb({ url: backend.url || '', dir });
+    await db.run('INSERT INTO users(username,password,city,first_name,last_name) VALUES(?,?,?,?,?)', ['admin', hashPassword('test-password-123'), null, 'Ali', 'Veli']);
+    await db.run('INSERT INTO users(username,password,city) VALUES(?,?,?)', ['izmir', hashPassword('izmir-password-123'), 'İzmir']);
+    await db.run('INSERT INTO users(username,password,city) VALUES(?,?,?)', ['izmir2', hashPassword('izmir2-password-123'), 'İzmir']);
+    await db.run('INSERT INTO users(username,password,city) VALUES(?,?,?)', ['manisa', hashPassword('manisa-password-123'), 'Manisa']);
+    await db.run('INSERT INTO users(username,password,city,passive_at) VALUES(?,?,?,?)', ['bursa', hashPassword('bursa-password-123'), 'Bursa', '2026-09-01T00:00:00.000Z']);
+    await db.close();
+
+    const socket = createServer(); socket.listen(0, '127.0.0.1'); await once(socket, 'listening');
+    const port = socket.address().port; await new Promise(r => socket.close(r));
+    const origin = `http://127.0.0.1:${port}`;
+    child = spawn(process.execPath, ['server.mjs'], { env: { ...process.env, PORT: String(port), HOST: '127.0.0.1', PUBLIC_ORIGIN: origin, DATA_DIR: dir, DATABASE_URL: backend.url || '' }, stdio: ['ignore', 'pipe', 'pipe'] });
+    let stderr = '';
+    child.stderr.on('data', chunk => { stderr += chunk; });
+    await Promise.race([
+      once(child.stdout, 'data'),
+      once(child, 'exit').then(() => { throw Error('Sunucu kapandı: ' + stderr); }),
+      new Promise((_, reject) => { const t = setTimeout(() => reject(Error('Başlatma zaman aşımı')), 10000); t.unref(); }),
+    ]);
+
+    const call = (path, { method = 'GET', data, cookie = '', raw, name } = {}) => fetch(origin + path, {
+      method,
+      headers: { Origin: origin, Cookie: cookie, ...(raw ? { 'Content-Type': 'application/octet-stream', 'X-File-Name': encodeURIComponent(name) } : { 'Content-Type': 'application/json' }) },
+      body: raw ?? (data ? JSON.stringify(data) : undefined),
+    });
+    const json = async (...args) => { const response = await call(...args); return { status: response.status, body: await response.json() }; };
+    const login = async (username, password) => (await call('/api/login', { method: 'POST', data: { username, password } })).headers.get('set-cookie').split(';')[0];
+    const admin = await login('admin', 'test-password-123');
+    const izmir = await login('izmir', 'izmir-password-123');
+
+    /* Sayfa herkese açık (bağlantı oturumsuz açılır), veri değil */
+    assert.equal((await call('/drive.html')).status, 200, 'Drive sayfası oturumsuz da gelir');
+    assert.equal((await call('/drive.js')).status, 200);
+    assert.equal((await call('/office.js')).status, 200, 'Word / Excel önizleyicisi bağlantıyla gelene de açık');
+    assert.equal((await call('/api/drive')).status, 401, 'oturumsuz ve bağlantısız: giriş istenir');
+    const empty = (await json('/api/drive', { cookie: izmir })).body;
+    assert.equal(empty.shared, true, 'il koordinatörünün kökü "Benimle paylaşılanlar"');
+    assert.deepEqual(empty.items, []);
+    assert.equal((await call('/api/drive/klasor', { method: 'POST', data: { name: 'x' }, cookie: izmir })).status, 400, 'il koordinatörü köke klasör açamaz');
+    assert.equal((await call('/api/drive?gorunum=son', { cookie: izmir })).status, 403);
+
+    /* Klasör, alt klasör, dosya */
+    const raporlar = (await json('/api/drive/klasor', { method: 'POST', data: { parent: null, name: '  Raporlar  ' }, cookie: admin })).body.id;
+    const eylul = (await json('/api/drive/klasor', { method: 'POST', data: { parent: raporlar, name: 'Eylül' }, cookie: admin })).body.id;
+    const gizli = (await json('/api/drive/klasor', { method: 'POST', data: { parent: null, name: 'Gizli' }, cookie: admin })).body.id;
+    assert.equal((await call('/api/drive/klasor', { method: 'POST', data: { parent: null, name: '   ' }, cookie: admin })).status, 400, 'boş ad');
+    const upload = await json(`/api/drive/dosya?ust=${eylul}`, { method: 'POST', raw: 'merhaba dünya', name: 'Özet çizelge.txt', cookie: admin });
+    assert.equal(upload.status, 201);
+    const ozet = upload.body.id;
+    const html = (await json(`/api/drive/dosya?ust=${raporlar}`, { method: 'POST', raw: '<script>alert(1)</script>', name: 'sayfa.html', cookie: admin })).body.id;
+    await json(`/api/drive/dosya?ust=${gizli}`, { method: 'POST', raw: 'gizli', name: 'gizli.txt', cookie: admin });
+
+    const root = (await json('/api/drive', { cookie: admin })).body;
+    assert.equal(root.role, 'owner');
+    assert.deepEqual(root.items.map(i => i.name).sort(), ['Gizli', 'Raporlar']);
+    assert.ok(root.used > 0 && root.quota > root.used, 'kota bilgisi');
+    const inEylul = (await json(`/api/drive?klasor=${eylul}`, { cookie: admin })).body;
+    assert.deepEqual(inEylul.path.map(p => p.name), ['Raporlar', 'Eylül']);
+    assert.equal(inEylul.items[0].name, 'Özet çizelge.txt');
+    assert.equal(inEylul.items[0].owner, 'Ali VELİ');
+
+    /* İndirme ve önizleme: yalnızca güvenli türler satır içi açılır */
+    const file = await call(`/api/drive/${ozet}/indir?goster=1`, { cookie: admin });
+    assert.equal(await file.text(), 'merhaba dünya');
+    assert.match(file.headers.get('content-disposition'), /^inline/);
+    assert.match(file.headers.get('content-security-policy'), /frame-ancestors 'self'/);
+    const script = await call(`/api/drive/${html}/indir?goster=1`, { cookie: admin });
+    assert.match(script.headers.get('content-disposition'), /^attachment/, 'HTML dosyası hiçbir zaman sayfa olarak açılmaz');
+    assert.equal(script.headers.get('content-type'), 'application/octet-stream');
+    await script.arrayBuffer();
+
+    /* Taşıma kuralları */
+    assert.equal((await call(`/api/drive/${raporlar}`, { method: 'PUT', data: { parent: eylul }, cookie: admin })).status, 400, 'klasör kendi altına taşınamaz');
+    assert.equal((await call(`/api/drive/${html}`, { method: 'PUT', data: { parent: eylul }, cookie: admin })).status, 200);
+    assert.equal((await call(`/api/drive/${html}`, { method: 'PUT', data: { parent: raporlar, name: 'sayfa-yeni.html' }, cookie: admin })).status, 200);
+
+    /* Bağlantı: kısıtlıyken çalışmaz, görüntüleyende yalnızca okunur */
+    const shared = (await json(`/api/drive/${raporlar}`, { method: 'PUT', data: { share: 'restricted' }, cookie: admin })).body;
+    assert.equal(shared.share, '');
+    const key = shared.link;
+    assert.match(key, /^[A-Za-z0-9_-]{32}$/);
+    assert.equal((await call(`/api/drive?pay=${key}`)).status, 404, 'kısıtlı bağlantı oturumsuz açılmaz');
+    assert.equal((await json(`/api/drive/${raporlar}`, { method: 'PUT', data: { share: 'viewer' }, cookie: admin })).body.link, key, 'bağlantı aynı kalır');
+    const anon = (await json(`/api/drive?pay=${key}`)).body;
+    assert.equal(anon.role, 'viewer');
+    assert.equal(anon.folder.id, raporlar);
+    assert.equal(anon.items.find(i => i.id === eylul).link, null, 'anahtarlar bağlantıyla gelene gönderilmez');
+    assert.equal(anon.used, null, 'kota yalnızca merkezde');
+    assert.equal((await call(`/api/drive?klasor=${eylul}&pay=${key}`)).status, 200, 'alt klasör de açılır');
+    assert.equal(await (await call(`/api/drive/${ozet}/indir?pay=${key}`)).text(), 'merhaba dünya');
+    assert.equal((await call(`/api/drive?klasor=${gizli}&pay=${key}`)).status, 404, 'paylaşım dışındaki klasör');
+    assert.equal((await call(`/api/drive/${gizli}/indir?pay=${key}`)).status, 404);
+    assert.equal((await call(`/api/drive?gorunum=son&pay=${key}`)).status, 403, 'Drive geneli görünümler kapalı');
+    assert.equal((await call(`/api/drive/klasor?pay=${key}`, { method: 'POST', data: { parent: raporlar, name: 'x' } })).status, 400, 'görüntüleyen klasör açamaz');
+    assert.equal((await call(`/api/drive/${ozet}?pay=${key}`, { method: 'PUT', data: { name: 'x.txt' } })).status, 403, 'görüntüleyen adlandıramaz');
+    assert.equal((await call(`/api/drive?pay=${'x'.repeat(32)}`)).status, 404, 'uydurma anahtar');
+    const search = (await json(`/api/drive?gorunum=ara&q=özet&pay=${key}`)).body;
+    assert.deepEqual(search.items.map(i => i.id), [ozet], 'arama paylaşımla sınırlı');
+    assert.deepEqual(search.items[0].location.map(p => p.name), ['Raporlar', 'Eylül']);
+    assert.equal((await json('/api/drive?gorunum=ara&q=gizli', { cookie: admin })).body.items.length, 2, 'merkez her yerde arar');
+
+    /* Düzenleyen (oturumu olmayan dış kişi): içeride her şeyi yapar, paylaşımın dışına çıkamaz */
+    await json(`/api/drive/${raporlar}`, { method: 'PUT', data: { share: 'editor' }, cookie: admin });
+    const made = await json(`/api/drive/klasor?pay=${key}`, { method: 'POST', data: { name: 'Bağlantıyla açılan' } });
+    assert.equal(made.status, 201, 'kök verilmezse paylaşılan klasöre açılır');
+    assert.equal((await json(`/api/drive?pay=${key}`)).body.items.find(i => i.id === made.body.id).owner, 'Bağlantıyla yüklendi');
+    assert.equal((await call(`/api/drive/dosya?ust=${made.body.id}&pay=${key}`, { method: 'POST', raw: 'ek', name: 'ek.pdf' })).status, 201);
+    assert.equal((await call(`/api/drive/${made.body.id}?pay=${key}`, { method: 'PUT', data: { parent: eylul } })).status, 200, 'içeride taşır');
+    assert.equal((await call(`/api/drive/${made.body.id}?pay=${key}`, { method: 'PUT', data: { parent: null } })).status, 400, 'köke çıkaramaz');
+    assert.equal((await call(`/api/drive/${made.body.id}?pay=${key}`, { method: 'PUT', data: { parent: gizli } })).status, 400, 'paylaşım dışına taşıyamaz');
+    assert.equal((await call(`/api/drive/${raporlar}?pay=${key}`, { method: 'PUT', data: { trashed: true } })).status, 403, 'paylaşılan klasörün kendisini silemez');
+    assert.equal((await call(`/api/drive/${raporlar}?pay=${key}`, { method: 'PUT', data: { parent: eylul } })).status, 403, 'paylaşılan klasörün kendisini taşıyamaz');
+    assert.equal((await call(`/api/drive/${raporlar}?pay=${key}`, { method: 'PUT', data: { share: 'restricted' } })).status, 403, 'paylaşımı değiştiremez');
+    assert.equal((await call(`/api/drive/${ozet}?pay=${key}`, { method: 'PUT', data: { starred: true } })).status, 403);
+    assert.equal((await call(`/api/drive/${ozet}/surum?pay=${key}`, { method: 'POST', raw: 'ikinci sürüm', name: 'x' })).status, 200, 'yeni sürüm yükler');
+    assert.equal(await (await call(`/api/drive/${ozet}/indir`, { cookie: admin })).text(), 'ikinci sürüm');
+
+    /* Sürüm geçmişi: eski içerik kaybolmaz, indirilir ve geri yüklenir */
+    const history = (await json(`/api/drive/${ozet}/surumler?pay=${key}`)).body;
+    assert.equal(history.versions.length, 1, 'yeni sürüm yüklenince eskisi geçmişe gider');
+    assert.equal(history.versions[0].by, 'Ali VELİ', 'eski sürümü yükleyen');
+    assert.equal(history.current.by, 'Bağlantıyla yüklendi');
+    const first = history.versions[0].id;
+    const oldFile = await call(`/api/drive/${ozet}/surumler/${first}`, { cookie: admin });
+    assert.equal(await oldFile.text(), 'merhaba dünya');
+    assert.match(decodeURIComponent(oldFile.headers.get('content-disposition').split("UTF-8''")[1]), /^Özet çizelge \(\d{4}-\d{2}-\d{2} \d{2}\.\d{2}\)\.txt$/, 'indirilen eski sürümün adında tarihi var');
+    assert.equal((await call(`/api/drive/${ozet}/surumler/${first}`, { method: 'POST', cookie: admin })).status, 200, 'geri yükler');
+    assert.equal(await (await call(`/api/drive/${ozet}/indir`, { cookie: admin })).text(), 'merhaba dünya');
+    const swapped = (await json(`/api/drive/${ozet}/surumler`, { cookie: admin })).body.versions;
+    assert.equal(swapped.length, 1, 'geri yüklenen sürüm geçerli olur, o anki içerik geçmişe gider');
+    await call(`/api/drive/${ozet}/surumler/${swapped[0].id}`, { method: 'POST', raw: undefined, cookie: admin });
+    assert.equal(await (await call(`/api/drive/${ozet}/indir`, { cookie: admin })).text(), 'ikinci sürüm');
+    const last = (await json(`/api/drive/${ozet}/surumler`, { cookie: admin })).body.versions[0].id;
+    assert.equal((await call(`/api/drive/${ozet}/surumler/${last}?pay=${key}`, { method: 'DELETE' })).status, 403, 'sürümü yalnızca merkez siler');
+    assert.equal((await call(`/api/drive/${ozet}/surumler/${last}`, { method: 'DELETE', cookie: admin })).status, 200);
+    assert.equal((await json(`/api/drive/${ozet}/surumler`, { cookie: admin })).body.versions.length, 0);
+    assert.equal((await call(`/api/drive/${ozet}/surumler/${last}`, { cookie: admin })).status, 404);
+    assert.equal((await call(`/api/drive/${made.body.id}?pay=${key}`, { method: 'PUT', data: { trashed: true } })).status, 200, 'içeriği çöpe atar');
+    assert.equal((await call(`/api/drive/${made.body.id}?pay=${key}`, { method: 'PUT', data: { trashed: false } })).status, 404, 'çöpteki öğe bağlantıya görünmez');
+    assert.equal((await call(`/api/drive/${made.body.id}?pay=${key}`, { method: 'DELETE' })).status, 404);
+
+    /* Kişi paylaşımı: il koordinatörüne klasör açılır (Google'daki "Kişi ekleyin") */
+    const izmirId = Number((await db_user_id(origin, admin, 'izmir')));
+    assert.equal((await call(`/api/drive/${eylul}/kisiler`, { method: 'PUT', data: { user: izmirId, role: 'viewer' }, cookie: izmir })).status, 404, 'erişimi olmayan öğeyi göremez, paylaşımı da ayarlayamaz');
+    const people = (await json(`/api/drive/${eylul}/kisiler`, { method: 'PUT', data: { user: izmirId, role: 'viewer' }, cookie: admin })).body;
+    assert.deepEqual(people.members.map(m => [m.user, m.role]), [[izmirId, 'viewer']]);
+    const mine = (await json('/api/drive', { cookie: izmir })).body;
+    assert.deepEqual(mine.items.map(i => i.id), [eylul], 'paylaşılan klasör "Benimle paylaşılanlar"da');
+    const inside = (await json(`/api/drive?klasor=${eylul}`, { cookie: izmir })).body;
+    assert.equal(inside.role, 'viewer');
+    assert.deepEqual(inside.path.map(p => p.name), ['Eylül'], 'yol erişebildiği klasörden başlar');
+    assert.equal((await call(`/api/drive?klasor=${raporlar}`, { cookie: izmir })).status, 404, 'üst klasör açılmaz');
+    assert.equal((await call(`/api/drive/klasor`, { method: 'POST', data: { parent: eylul, name: 'x' }, cookie: izmir })).status, 400, 'görüntüleyen klasör açamaz');
+    await call(`/api/drive/${eylul}/kisiler`, { method: 'PUT', data: { user: izmirId, role: 'editor' }, cookie: admin });
+    const sub = await json('/api/drive/klasor', { method: 'POST', data: { parent: eylul, name: 'İzmir raporu' }, cookie: izmir });
+    assert.equal(sub.status, 201, 'düzenleyen içeride klasör açar');
+    assert.equal((await call(`/api/drive/dosya?ust=${sub.body.id}`, { method: 'POST', raw: 'iz', name: 'iz.txt', cookie: izmir })).status, 201);
+    assert.equal((await call(`/api/drive/${sub.body.id}`, { method: 'PUT', data: { name: 'İzmir' }, cookie: izmir })).status, 200);
+    assert.equal((await call(`/api/drive/${eylul}`, { method: 'PUT', data: { name: 'x' }, cookie: izmir })).status, 200, 'paylaşılan klasörün adını düzenleyen değiştirebilir');
+    await call(`/api/drive/${eylul}`, { method: 'PUT', data: { name: 'Eylül' }, cookie: admin });
+    assert.equal((await call(`/api/drive/${eylul}`, { method: 'PUT', data: { trashed: true }, cookie: izmir })).status, 403, 'paylaşılan klasörün kendisini silemez');
+    assert.equal((await call(`/api/drive/${sub.body.id}`, { method: 'PUT', data: { parent: gizli }, cookie: izmir })).status, 400, 'yetkisi dışına taşıyamaz');
+    const tree = (await json('/api/drive?gorunum=agac', { cookie: izmir })).body.folders;
+    assert.deepEqual(tree.map(f => [f.name, f.parent]).sort(), [['Eylül', null], ['İzmir', eylul]], 'ağaçta yalnızca erişebildiği klasörler');
+    assert.equal((await json('/api/drive?gorunum=agac', { cookie: admin })).body.folders.length, 5);
+    assert.deepEqual((await json(`/api/drive/${sub.body.id}/kisiler`, { cookie: admin })).body.inherited.map(m => m.from), ['Eylül'], 'üst klasörden gelen yetki gösterilir');
+    await call(`/api/drive/${eylul}/kisiler`, { method: 'PUT', data: { user: izmirId, role: null }, cookie: admin });
+    assert.equal((await call(`/api/drive?klasor=${eylul}`, { cookie: izmir })).status, 404, 'erişim kaldırılınca açılmaz');
+
+    /* Kopya, yıldız, görünümler */
+    const copy = (await json(`/api/drive/${ozet}/kopya`, { method: 'POST', cookie: admin })).body;
+    assert.equal(copy.name, 'Özet çizelge kopyası.txt');
+    await call(`/api/drive/${ozet}`, { method: 'PUT', data: { starred: true }, cookie: admin });
+    assert.deepEqual((await json('/api/drive?gorunum=yildizli', { cookie: admin })).body.items.map(i => i.id), [ozet]);
+    assert.deepEqual((await json('/api/drive?gorunum=paylasilan', { cookie: admin })).body.items.map(i => i.id), [raporlar], 'kaldırılan kişi paylaşımı listeden düşer');
+    assert.ok((await json('/api/drive?gorunum=son', { cookie: admin })).body.items.every(i => i.kind === 'file'));
+
+    /* ZIP: klasör içiyle */
+    const archive = await call(`/api/drive/${raporlar}/indir?pay=${key}`);
+    assert.equal(archive.headers.get('content-type'), 'application/zip');
+    const files = unzip(Buffer.from(await archive.arrayBuffer()));
+    assert.equal(files['Raporlar/Eylül/Özet çizelge.txt'].toString(), 'ikinci sürüm');
+    assert.equal(files['Raporlar/Eylül/Özet çizelge kopyası.txt'].toString(), 'ikinci sürüm');
+    assert.ok(files['Raporlar/sayfa-yeni.html'], 'yeniden adlandırılan dosya');
+    assert.equal(files['Raporlar/Eylül/İzmir/iz.txt'].toString(), 'iz');
+    assert.ok(!Object.keys(files).some(name => name.includes('Bağlantıyla açılan')), 'çöpteki klasör arşive girmez');
+    const multi = unzip(Buffer.from(await (await call(`/api/drive/indir?ids=${raporlar},${gizli}`, { cookie: admin })).arrayBuffer()));
+    assert.ok(multi['Gizli/gizli.txt'] && multi['Raporlar/sayfa-yeni.html']);
+    assert.equal((await call(`/api/drive/indir?ids=${gizli}&pay=${key}`)).status, 404, 'bağlantı paylaşım dışını paketleyemez');
+
+    /* Çöp kutusu: klasör çöpe gidince bağlantı da kapanır; geri gelince açılır */
+    assert.equal((await call(`/api/drive/${raporlar}`, { method: 'DELETE', cookie: admin })).status, 400, 'çöpe atılmadan kalıcı silinmez');
+    await call(`/api/drive/${raporlar}`, { method: 'PUT', data: { trashed: true }, cookie: admin });
+    assert.equal((await call(`/api/drive?pay=${key}`)).status, 404, 'çöpteki paylaşım çalışmaz');
+    assert.equal((await call(`/api/drive?klasor=${eylul}`, { cookie: admin })).status, 404, 'çöpteki klasörün içi açılmaz');
+    const trash = (await json('/api/drive?gorunum=cop', { cookie: admin })).body.items.map(i => i.id);
+    assert.ok(trash.includes(raporlar) && !trash.includes(eylul), 'çöpte yalnızca atılan öğe listelenir');
+    assert.equal((await call(`/api/drive/${raporlar}`, { method: 'PUT', data: { name: 'x' }, cookie: admin })).status, 400, 'çöpteki öğe düzenlenmez');
+    await call(`/api/drive/${raporlar}`, { method: 'PUT', data: { trashed: false }, cookie: admin });
+    assert.equal((await call(`/api/drive?pay=${key}`)).status, 200, 'geri yüklenince bağlantı yine çalışır');
+
+    /* Bağlantının bitiş tarihi ve yenilenmesi */
+    assert.equal((await call(`/api/drive/${raporlar}`, { method: 'PUT', data: { shareExpires: '2000-01-01' }, cookie: admin })).status, 400, 'geçmiş tarih seçilemez');
+    assert.equal((await call(`/api/drive/${raporlar}`, { method: 'PUT', data: { shareExpires: '2026-13-01' }, cookie: admin })).status, 400);
+    const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Istanbul' }).format(new Date());
+    assert.equal((await json(`/api/drive/${raporlar}`, { method: 'PUT', data: { shareExpires: today }, cookie: admin })).body.shareExpires, today);
+    assert.equal((await call(`/api/drive?pay=${key}`)).status, 200, 'son gün boyunca çalışır');
+    const raw = await openDb({ url: backend.url || '', dir });
+    await raw.run('UPDATE drive_items SET share_expires=? WHERE id=?', ['2000-01-01', raporlar]);
+    await raw.close();
+    assert.equal((await call(`/api/drive?pay=${key}`)).status, 404, 'süresi dolan bağlantı çalışmaz');
+    await call(`/api/drive/${raporlar}`, { method: 'PUT', data: { shareExpires: null }, cookie: admin });
+    assert.equal((await call(`/api/drive?pay=${key}`)).status, 200, 'süre kaldırılınca yine çalışır');
+    assert.equal((await call(`/api/drive/${raporlar}?pay=${key}`, { method: 'PUT', data: { renewLink: true } })).status, 403, 'bağlantıyı yalnızca merkez yeniler');
+    const renewed = (await json(`/api/drive/${raporlar}`, { method: 'PUT', data: { renewLink: true }, cookie: admin })).body;
+    assert.notEqual(renewed.link, key);
+    assert.equal(renewed.share, 'editor', 'yenileme yetkiye dokunmaz');
+    assert.equal((await call(`/api/drive?pay=${key}`)).status, 404, 'eski bağlantı kalıcı olarak ölür');
+    assert.equal((await call(`/api/drive?pay=${renewed.link}`)).status, 200, 'yeni bağlantı çalışır');
+
+    /* Kalıcı silme ve çöpü boşaltma */
+    const before = (await json('/api/drive', { cookie: admin })).body.used;
+    await call(`/api/drive/${gizli}`, { method: 'PUT', data: { trashed: true }, cookie: admin });
+    assert.equal((await call('/api/drive/cop', { method: 'DELETE', cookie: izmir })).status, 403);
+    const emptied = (await json('/api/drive/cop', { method: 'DELETE', cookie: admin })).body;
+    assert.ok(emptied.removed >= 4, 'çöpteki klasörler içleriyle silinir');
+    assert.ok((await json('/api/drive', { cookie: admin })).body.used < before, 'kullanılan alan azalır');
+    assert.equal((await json('/api/drive?gorunum=cop', { cookie: admin })).body.items.length, 0);
+    assert.equal((await call(`/api/drive/${gizli}/indir`, { cookie: admin })).status, 404);
+
+    /* İşlem geçmişi: kim, ne yaptı; kalıcı silinen öğe de geçmişte kalır */
+    const all = (await json('/api/drive/etkinlik', { cookie: admin })).body.entries;
+    const actions = new Set(all.map(e => e.action));
+    for (const action of ['create', 'upload', 'rename', 'move', 'link', 'member', 'version', 'version_restore', 'version_delete', 'trash', 'untrash', 'delete', 'expiry', 'renew', 'copy']) assert.ok(actions.has(action), `"${action}" geçmişe yazılır`);
+    const gone = all.find(e => e.action === 'delete' && e.item.name === 'Gizli');
+    assert.ok(gone && !gone.item.exists, 'kalıcı silinen klasör adıyla geçmişte kalır');
+    assert.equal(gone.who, 'Ali VELİ');
+    assert.equal((await call('/api/drive/etkinlik', { cookie: izmir })).status, 403, "Drive'ın tüm geçmişi merkezde");
+    const folderLog = (await json(`/api/drive/${raporlar}/etkinlik?pay=${renewed.link}`)).body.entries;
+    assert.ok(folderLog.some(e => e.action === 'upload' && e.who === null && e.item.name === 'ek.pdf'), 'bağlantıyla yapılan işlem kimliksiz yazılır');
+    assert.ok(folderLog.some(e => e.action === 'member' && e.detail.city === 'İzmir' && e.detail.role === 'viewer'), 'kişi yetkisi değişikliği klasörün geçmişinde');
+    assert.ok(!folderLog.some(e => e.item.name === 'Gizli'), 'başka klasörün geçmişi görünmez');
+    const htmlMoves = (await json(`/api/drive/${html}/etkinlik`, { cookie: admin })).body.entries.filter(e => e.action === 'move');
+    assert.equal(htmlMoves.length, 2, 'her taşıma bir kez görünür');
+    assert.deepEqual([htmlMoves[0].detail.from, htmlMoves[0].detail.to], ['Eylül', 'Raporlar']);
+    assert.equal((await call('/api/drive/etkinlik?pay=' + renewed.link)).status, 403);
+
+    /* Toplu paylaşım ve "Yükleyen": iller klasöre dosya yükler, birbirininkini görmez */
+    const manisa = await login('manisa', 'manisa-password-123');
+    const manisaId = Number(await db_user_id(origin, admin, 'manisa'));
+    const teslim = (await json('/api/drive/klasor', { method: 'POST', data: { parent: null, name: 'İl teslimleri' }, cookie: admin })).body.id;
+    await json(`/api/drive/dosya?ust=${teslim}`, { method: 'POST', raw: 'merkez', name: 'yönerge.pdf', cookie: admin });
+    assert.equal((await call(`/api/drive/${ozet}/kisiler`, { method: 'PUT', data: { user: izmirId, role: 'uploader' }, cookie: admin })).status, 400, 'yükleme yetkisi yalnızca klasöre verilir');
+    assert.equal((await call(`/api/drive/${teslim}/kisiler`, { method: 'PUT', data: { cities: [], role: 'viewer' }, cookie: admin })).status, 400, 'il seçilmeden toplu paylaşım olmaz');
+    assert.equal((await call(`/api/drive/${teslim}/kisiler`, { method: 'PUT', data: { cities: ['Atlantis'], role: 'viewer' }, cookie: admin })).status, 400, 'geçersiz il');
+    const bulk = (await json(`/api/drive/${teslim}/kisiler`, { method: 'PUT', data: { cities: ['*'], role: 'uploader' }, cookie: admin })).body;
+    assert.equal(bulk.changed, 1);
+    assert.deepEqual(bulk.groups.map(g => [g.scope, g.role, g.accounts]), [['*', 'uploader', 3]], 'bütün iller tek grup; pasif hesap sayılmaz');
+    assert.deepEqual(bulk.members, [], 'kişilere tek tek yazılmaz');
+    assert.equal((await json(`/api/drive/${teslim}/kisiler`, { method: 'PUT', data: { cities: ['*'], role: 'uploader' }, cookie: admin })).body.changed, 0, 'yeniden eklemek bir şey değiştirmez');
+    assert.equal((await json(`/api/drive/${teslim}/kisiler`, { method: 'PUT', data: { cities: ['Manisa'], role: 'uploader' }, cookie: admin })).body.changed, 0, 'bütün illerde zaten aynı yetki var');
+    const stronger = (await json(`/api/drive/${teslim}/kisiler`, { method: 'PUT', data: { cities: ['Manisa'], role: 'viewer' }, cookie: admin })).body;
+    assert.deepEqual(stronger.groups.map(g => g.scope), ['*', 'Manisa'], 'ile daha güçlü yetki ayrıca eklenir');
+    assert.equal((await json(`/api/drive?klasor=${teslim}`, { cookie: manisa })).body.role, 'viewer', 'en güçlü yetki geçer');
+    assert.deepEqual((await json(`/api/drive/${teslim}/kisiler`, { method: 'PUT', data: { group: 'Manisa', role: null }, cookie: admin })).body.groups.map(g => g.scope), ['*'], 'tek grup kaldırılır, "bütün iller" kalır');
+    assert.equal((await call(`/api/drive/${teslim}/kisiler`, { method: 'PUT', data: { cities: ['*'], role: 'viewer' }, cookie: izmir })).status, 403, 'toplu paylaşım merkezin işi');
+    /* Sonradan açılan hesap il grubu yetkisini kendiliğinden alır */
+    const late = await openDb({ url: backend.url || '', dir });
+    await late.run('INSERT INTO users(username,password,city) VALUES(?,?,?)', ['izmir3', hashPassword('izmir3-password-123'), 'İzmir']);
+    await late.close();
+    const izmir3 = await login('izmir3', 'izmir3-password-123');
+    assert.equal((await json(`/api/drive?klasor=${teslim}`, { cookie: izmir3 })).body.role, 'uploader', 'yeni hesap da yükleyebilir');
+
+    const izmirUp = (await json(`/api/drive/dosya?ust=${teslim}`, { method: 'POST', raw: 'izmir raporu', name: 'rapor.pdf', cookie: izmir })).body.id;
+    const manisaUp = (await json(`/api/drive/dosya?ust=${teslim}`, { method: 'POST', raw: 'manisa raporu', name: 'rapor.pdf', cookie: manisa })).body.id;
+    assert.ok(izmirUp && manisaUp, 'yükleyen dosya yükler');
+    const shelf = (await json('/api/drive', { cookie: izmir })).body;
+    assert.ok(shelf.items.some(i => i.id === teslim && i.access === 'uploader'), 'klasör "Benimle paylaşılanlar"da');
+    const izmirView = (await json(`/api/drive?klasor=${teslim}`, { cookie: izmir })).body;
+    assert.equal(izmirView.role, 'uploader');
+    assert.deepEqual(izmirView.items.map(i => [i.id, i.access]), [[izmirUp, 'editor']], 'yalnızca kendi yüklediğini görür, onu düzenler');
+    assert.equal((await call(`/api/drive/${manisaUp}/indir`, { cookie: izmir })).status, 404, 'başka ilin dosyasını indiremez');
+    assert.equal((await call(`/api/drive/${manisaUp}`, { method: 'PUT', data: { trashed: true }, cookie: izmir })).status, 404, 'başka ilin dosyasını silemez');
+    assert.equal((await call(`/api/drive/${izmirUp}`, { method: 'PUT', data: { name: 'İzmir raporu.pdf' }, cookie: izmir })).status, 200, 'kendi yüklediğini adlandırır');
+    assert.equal((await call(`/api/drive/${izmirUp}/surum`, { method: 'POST', raw: 'izmir raporu 2', name: 'x', cookie: izmir })).status, 200, 'yeni sürüm yükler');
+    const own = await json('/api/drive/klasor', { method: 'POST', data: { parent: teslim, name: 'Fotoğraflar' }, cookie: izmir });
+    assert.equal(own.status, 201, 'kendi klasörünü açar');
+    assert.equal((await call(`/api/drive/${izmirUp}`, { method: 'PUT', data: { parent: own.body.id }, cookie: izmir })).status, 200, 'kendi klasörüne taşır');
+    assert.equal((await call(`/api/drive/${teslim}`, { method: 'PUT', data: { name: 'x' }, cookie: izmir })).status, 403, 'klasörün kendisini adlandıramaz');
+    assert.equal((await call(`/api/drive/${teslim}`, { method: 'PUT', data: { trashed: true }, cookie: izmir })).status, 403);
+    const dropZip = unzip(Buffer.from(await (await call(`/api/drive/${teslim}/indir`, { cookie: izmir })).arrayBuffer()));
+    assert.deepEqual(Object.keys(dropZip), ['İl teslimleri/Fotoğraflar/İzmir raporu.pdf'], 'klasörü indirirken yalnızca kendi dosyaları');
+    const dropLog = (await json(`/api/drive/${teslim}/etkinlik`, { cookie: izmir })).body.entries;
+    assert.ok(dropLog.length && dropLog.every(e => e.who === 'izmir'), 'geçmişte yalnızca kendi işlemleri');
+    assert.deepEqual((await json('/api/drive?gorunum=ara&q=rapor', { cookie: izmir })).body.items.map(i => i.id), [izmirUp], 'arama da yalnızca kendininkini bulur');
+    assert.equal((await json(`/api/drive?klasor=${teslim}`, { cookie: admin })).body.items.length, 3, 'merkez hepsini görür');
+    assert.equal((await call(`/api/drive/${own.body.id}`, { method: 'PUT', data: { trashed: true }, cookie: izmir })).status, 200, 'kendi yüklediğini çöpe atar');
+
+    /* Teslim durumu: hangi il yükledi, hangisi yüklemedi */
+    const rootItem = (await json('/api/drive', { cookie: admin })).body.items.find(i => i.id === teslim);
+    assert.ok(rootItem.collect && rootItem.groups.includes('*'), 'yükleme klasörü işaretli');
+    await json(`/api/drive/dosya?ust=${teslim}`, { method: 'POST', raw: 'ikinci', name: 'ek.pdf', cookie: manisa });
+    const status = (await json(`/api/drive/${teslim}/teslim`, { cookie: admin })).body;
+    assert.equal(status.cities.length, 81, '"bütün iller" 81 ili bekler');
+    const byCity = Object.fromEntries(status.cities.map(c => [c.city, c]));
+    assert.deepEqual([byCity.Manisa.files, byCity.Manisa.size, byCity.İzmir.files, byCity.İzmir.accounts, byCity.Adana.accounts, status.done], [2, 19, 0, 3, 0, 1], 'çöpe atılan sayılmaz, merkezin dosyası sayılmaz');
+    assert.ok(byCity.Manisa.last);
+    assert.equal((await call(`/api/drive/${teslim}/teslim`, { cookie: izmir })).status, 403);
+    assert.equal((await call(`/api/drive/${ozet}/teslim`, { cookie: admin })).status, 400);
+
+    /* "Bütün iller" açıkken bir il çıkarılırsa grup kalan illere bölünür */
+    const removed = (await json(`/api/drive/${teslim}/kisiler`, { method: 'PUT', data: { cities: ['İzmir'], role: null }, cookie: admin })).body;
+    assert.equal(removed.groups.length, 80);
+    assert.ok(!removed.groups.some(g => g.scope === '*' || g.scope === 'İzmir') && removed.groups.every(g => g.role === 'uploader'));
+    assert.equal((await call(`/api/drive?klasor=${teslim}`, { cookie: izmir })).status, 404, 'çıkarılan ilin hesabı erişemez');
+    assert.equal((await call(`/api/drive?klasor=${teslim}`, { cookie: izmir3 })).status, 404);
+    assert.equal((await call(`/api/drive?klasor=${teslim}`, { cookie: manisa })).status, 200, 'öteki iller sürer');
+    assert.equal((await json(`/api/drive/${teslim}/teslim`, { cookie: admin })).body.cities.length, 80);
+    const bulkLog = (await json(`/api/drive/${teslim}/etkinlik`, { cookie: admin })).body.entries.filter(e => e.action === 'member_bulk');
+    assert.deepEqual(bulkLog.map(e => [e.detail.role, e.detail.cities]), [[null, ['İzmir']], [null, ['Manisa']], ['viewer', ['Manisa']], ['uploader', null]], 'her toplu işlem geçmişe tek satır');
+    const everyone = (await json(`/api/drive/${teslim}/kisiler`, { method: 'PUT', data: { cities: ['*'], role: null }, cookie: admin })).body;
+    assert.deepEqual([everyone.groups, everyone.members], [[], []], '"bütün il koordinatörlerinin erişimini kaldır" hepsini temizler');
+
+    /* Gelişmiş arama: tür, sahip, tarih, konum; Türkçe harften bağımsız */
+    assert.deepEqual((await json('/api/drive?gorunum=ara', { cookie: admin })).body.items, [], 'süzgeçsiz arama boş döner');
+    const pdfs = (await json('/api/drive?gorunum=ara&tur=pdf', { cookie: admin })).body;
+    assert.ok(pdfs.items.length >= 2 && pdfs.items.every(i => i.type === 'application/pdf'));
+    assert.ok(pdfs.owners.some(o => o.me) && pdfs.owners.some(o => o.id === manisaId), 'sahip seçenekleri');
+    assert.deepEqual((await json(`/api/drive?gorunum=ara&q=${encodeURIComponent('ozet CIZELGE')}`, { cookie: admin })).body.items.map(i => i.name).sort(), ['Özet çizelge kopyası.txt', 'Özet çizelge.txt'], 'büyük-küçük ve Türkçe harften bağımsız, bütün kelimeler');
+    assert.deepEqual((await json(`/api/drive?gorunum=ara&sahip=${manisaId}`, { cookie: admin })).body.items.map(i => i.name).sort(), ['ek.pdf', 'rapor.pdf']);
+    assert.ok((await json('/api/drive?gorunum=ara&sahip=baglanti', { cookie: admin })).body.items.every(i => i.owner === 'Bağlantıyla yüklendi'));
+    assert.deepEqual((await json(`/api/drive?gorunum=ara&tur=folder&konum=${raporlar}`, { cookie: admin })).body.items.map(i => i.name).sort((a, b) => a.localeCompare(b, 'tr')), ['Eylül', 'İzmir'], 'klasörün içinde, kendisi hariç');
+    assert.ok((await json('/api/drive?gorunum=ara&tarih=bugun', { cookie: admin })).body.items.length > 0);
+    assert.equal((await json('/api/drive?gorunum=ara&tarih=gecenyil', { cookie: admin })).body.items.length, 0);
+    assert.equal((await call('/api/drive?gorunum=ara&tur=xyz', { cookie: admin })).status, 400);
+    assert.equal((await call(`/api/drive?gorunum=ara&q=a&konum=${teslim}`, { cookie: izmir })).status, 400, 'erişemediği klasörde arayamaz');
+    assert.deepEqual((await json(`/api/drive?gorunum=ara&q=ozet&pay=${renewed.link}`)).body.items.map(i => i.name).sort(), ['Özet çizelge kopyası.txt', 'Özet çizelge.txt']);
+    assert.deepEqual((await json(`/api/drive?gorunum=ara&tur=pdf&pay=${renewed.link}`)).body.items, [], 'bağlantıyla gelen yalnızca paylaşılan klasörde arar');
+  } finally {
+    if (child && child.exitCode === null) { child.kill(); await once(child, 'exit'); }
+    try { rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }); } catch {}
+  }
+});

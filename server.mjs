@@ -9,6 +9,7 @@ import { port, origin, basePath } from './lib/ayar.mjs';
 import { etkinlikRoutes } from './routes/etkinlik.mjs';
 import { oturumRoutes } from './routes/oturum.mjs';
 import { formRoutes } from './routes/form.mjs';
+import { driveRoutes } from './routes/drive.mjs';
 
 /**
  * HTTP sunucusu: ortak başlıklar, oturum çözümü, yönlendirme ve statik
@@ -26,12 +27,15 @@ const logo = await readFile(new URL('./public/genctek.png', import.meta.url));
 const etkinlik = etkinlikRoutes({ db, logo });
 const oturum = oturumRoutes({ db });
 const { handle: form, formList } = formRoutes({ db });
+const drive = driveRoutes({ db });
 
 /* ---- Statik dosyalar ---------------------------------------------------
    Takvim yalnızca oturum açmış kullanıcıya gönderilir: "/" oturumsuzken
    giriş sayfasını döndürür, takvim sayfası ve betiği korunur. Stil, logo
-   ve giriş sayfası herkese açıktır (giriş ekranı onlarsız çizilemez). */
-const FILES = { '/index.html': ['index.html', 'text/html'], '/giris.html': ['giris.html', 'text/html'], '/giris.js': ['giris.js', 'text/javascript'], '/app.js': ['app.js', 'text/javascript'], '/formlar.html': ['formlar.html', 'text/html'], '/formlar.js': ['formlar.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'], '/genctek.png': ['genctek.png', 'image/png'] };
+   ve giriş sayfası herkese açıktır (giriş ekranı onlarsız çizilemez).
+   Drive sayfası da açıktır: paylaşım bağlantısı oturumsuz açılır, veriyi
+   uçlar korur (bkz. routes/drive.mjs). */
+const FILES = { '/index.html': ['index.html', 'text/html'], '/giris.html': ['giris.html', 'text/html'], '/giris.js': ['giris.js', 'text/javascript'], '/app.js': ['app.js', 'text/javascript'], '/formlar.html': ['formlar.html', 'text/html'], '/formlar.js': ['formlar.js', 'text/javascript'], '/drive.html': ['drive.html', 'text/html'], '/drive.js': ['drive.js', 'text/javascript'], '/office.js': ['office.js', 'text/javascript'], '/style.css': ['style.css', 'text/css'], '/genctek.png': ['genctek.png', 'image/png'] };
 const PRIVATE_FILES = ['/index.html', '/app.js', '/formlar.html', '/formlar.js'];
 
 async function staticFile(req, res, url, user, readOnly) {
@@ -78,6 +82,7 @@ const server = createServer(async (req, res) => {
     if (await etkinlik(ctx)) return;
     if (await oturum(ctx)) return;
     if (await form(ctx)) return;
+    if (await drive(ctx)) return;
     if (await staticFile(req, res, url, user, readOnly)) return;
 
     send(res, 404, { error: 'Sayfa bulunamadı.' });
@@ -88,6 +93,8 @@ const server = createServer(async (req, res) => {
   }
 });
 
-server.requestTimeout = 15000; server.headersTimeout = 10000;
+/* Drive'a 50 MB'lık dosya yavaş bağlantıda dakikalar sürebilir; başlıklar
+   yine 10 saniyede gelmeli, gövde boyutunu da her uç kendisi sınırlar. */
+server.requestTimeout = 600000; server.headersTimeout = 10000;
 server.listen(port, process.env.HOST || '127.0.0.1', () => console.log(`GençTek takvimi: ${origin}${basePath} (${db.kind})`));
 for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => server.close(async () => { await db.close(); process.exit(0); }));

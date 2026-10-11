@@ -81,6 +81,8 @@ async function identity() {
   $('#forms-badge').hidden = !meta.pendingForms;
   $('#forms-badge').textContent = meta.pendingForms || '';
   $('#forms-button').title = meta.pendingForms ? meta.pendingForms + ' form yanıtınızı bekliyor' : '';
+  /* Drive: proje yöneticileri (merkez) yönetir; il koordinatörü kendisiyle paylaşılanları görür. */
+  $('#drive-button').hidden = !user;
   /* Merkez hatırlattıysa takvimin üstünde bant: kişi formu gönderene kadar kalır. */
   const reminders = meta.reminders || [];
   $('#reminder-banner').hidden = !reminders.length;
