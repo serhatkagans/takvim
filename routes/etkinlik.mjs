@@ -51,10 +51,15 @@ export function etkinlikRoutes({ db, logo }) {
     if (!events.length) return [];
     const ids = events.map(e => e.id);
     const rows = await db.all(`SELECT event_id,type,data FROM photos WHERE event_id IN (${ids.map(() => '?').join(',')}) ORDER BY event_id,id`, ids);
-    /* Aynı gün aynı adı taşıyan iki etkinlik olursa klasörler karışmasın. */
+    /* Klasör adı düzenleyen ille başlar: arşiv açılınca klasörler il il
+       sıralanır, adında il geçmeyen etkinliğin de hangi ile ait olduğu
+       görünür. Çok illi ortak etkinlikte ad uzamasın diye ilk iki il yazılır.
+       Aynı gün aynı adı taşıyan iki etkinlik olursa klasörler karışmasın. */
     const folders = new Map(), used = new Set();
     for (const e of events) {
-      const base = `${e.start.slice(0, 10)} ${safeName(e.title)}`;
+      const organizers = listOf(e.cities);
+      const place = organizers.length > 2 ? `${organizers.slice(0, 2).join(', ')} +${organizers.length - 2}` : organizers.join(', ') || e.city;
+      const base = `${safeName(place)} - ${e.start.slice(0, 10)} ${safeName(e.title)}`;
       const name = used.has(base) ? `${base} (${e.id})` : base;
       used.add(name);
       folders.set(e.id, name);

@@ -549,8 +549,9 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
     assert.match(fotoParts['icindekiler.txt'].toString('utf8'), /Yapay zekâ tanışma toplantısı/);
     const fotoNames = Object.keys(fotoParts).filter(name => name.endsWith('.jpg'));
     assert.equal(fotoNames.length, 6, 'silinen hariç altı fotoğraf arşivde');
-    /* Klasör de dosya adı da etkinliği taşır: hangi resim hangi etkinliğin, karışmaz. */
-    assert.ok(fotoNames.every(name => name.startsWith('2026-09-16 ') && name.includes('/2026-09-16 ')), fotoNames.join(', '));
+    /* Klasör de dosya adı da etkinliği taşır ve düzenleyen ille başlar:
+       hangi resim hangi ilin hangi etkinliğinin, karışmaz. */
+    assert.ok(fotoNames.every(name => /^YEĞİTEK, İzmir - 2026-09-16 [^/]+\/YEĞİTEK, İzmir - 2026-09-16 /.test(name)), fotoNames.join(', '));
     assert.deepEqual(fotoParts[fotoNames[0]], jpeg);
     assert.equal((await request('/api/rapor?bas=2027-01-01&bit=2027-01-31&bicim=zip', 'GET', null, cookie)).status, 400, 'fotoğrafsız dönem');
     assert.match(sheetXml, /<v>46281<\/v>/, '16 Eylül 2026 gerçek Excel tarihi');
