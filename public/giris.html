@@ -25,8 +25,34 @@
     <p class="login-lede">Takvim yalnızca yetkili kullanıcılara açıktır. Merkez veya il yönetici hesabınızla giriş yapın.</p>
     <label>T.C. kimlik no<input name="username" autocomplete="username" inputmode="numeric" required maxlength="100" autofocus></label>
     <label>Parola<input name="password" type="password" autocomplete="current-password" required></label>
+    <p class="notice" role="status" id="login-notice" hidden></p>
     <p class="error" role="alert" id="login-error"></p>
     <button class="button button-primary" type="submit">Giriş yap</button>
+    <button class="text-link" type="button" id="forgot-open">Şifremi unuttum</button>
+  </form>
+
+  <!-- "Şifremi unuttum": bağlantı hesapta kayıtlı e-postaya gider. -->
+  <form id="forgot-form" class="login-card" method="post" action="api/sifre-unuttum" hidden>
+    <p class="eyebrow">Şifremi unuttum</p>
+    <h1>Parola sıfırlama</h1>
+    <p class="login-lede">T.C. kimlik numaranızı ve hesabınızda kayıtlı e-posta adresinizi yazın. Bilgiler eşleşirse yeni parola belirleme bağlantısı e-postanıza gönderilir.</p>
+    <label>T.C. kimlik no<input name="username" autocomplete="username" inputmode="numeric" required maxlength="100"></label>
+    <label>E-posta<input name="email" type="email" autocomplete="email" required maxlength="150"></label>
+    <p class="error" role="alert"></p>
+    <button class="button button-primary" type="submit">Bağlantı gönder</button>
+    <button class="text-link" type="button" data-back>Girişe dön</button>
+  </form>
+
+  <!-- E-postadaki bağlantıyla açılır (#sifirla=…). -->
+  <form id="reset-form" class="login-card" method="post" action="api/sifre-sifirla" hidden>
+    <p class="eyebrow">Parola sıfırlama</p>
+    <h1>Yeni parola belirleyin</h1>
+    <p class="login-lede">Parola en az 12 karakter olmalıdır. Kaydettiğinizde açık oturumlarınızın hepsi kapanır.</p>
+    <label>Yeni parola<input name="password" type="password" autocomplete="new-password" required minlength="12" maxlength="200"></label>
+    <label>Yeni parola (tekrar)<input name="again" type="password" autocomplete="new-password" required minlength="12" maxlength="200"></label>
+    <p class="error" role="alert"></p>
+    <button class="button button-primary" type="submit">Parolayı kaydet</button>
+    <button class="text-link" type="button" data-back>Girişe dön</button>
   </form>
 </main>
 

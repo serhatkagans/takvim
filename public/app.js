@@ -895,11 +895,11 @@ async function loadUsers() {
 function renderUsers() {
   const query = $('#users-search').value.trim().toLocaleLowerCase('tr-TR');
   const rows = query
-    ? userRows.filter(row => [fullName(row), row.username, row.city || 'Merkez'].join(' ').toLocaleLowerCase('tr-TR').includes(query))
+    ? userRows.filter(row => [fullName(row), row.username, row.email || '', row.city || 'Merkez'].join(' ').toLocaleLowerCase('tr-TR').includes(query))
     : userRows;
   const cityOptions = ['', ...[...meta.cities].sort((a, b) => a.localeCompare(b, 'tr'))];
   const day = iso => new Date(iso).toLocaleDateString('tr-TR');
-  const head = row => `<div><strong>${escapeHtml(fullName(row) || row.username)}</strong><small>${fullName(row) ? escapeHtml(row.username) + ' · ' : 'ad soyad girilmemiş · '}${row.events} etkinlik${row.sessions ? ' · oturumu açık' : ''}${row.self ? ' · bu hesap sizsiniz' : ''}${row.passive_at ? ' · ' + day(row.passive_at) + ' tarihinde pasife alındı' : ''}</small><small>${row.created_at ? 'Kayıt: ' + day(row.created_at) + ' · ' : ''}${row.last_login ? 'Son giriş: ' + day(row.last_login) : 'Henüz giriş yapmadı'}</small></div>`;
+  const head = row => `<div><strong>${escapeHtml(fullName(row) || row.username)}</strong><small>${fullName(row) ? escapeHtml(row.username) + ' · ' : 'ad soyad girilmemiş · '}${row.events} etkinlik${row.sessions ? ' · oturumu açık' : ''}${row.self ? ' · bu hesap sizsiniz' : ''}${row.passive_at ? ' · ' + day(row.passive_at) + ' tarihinde pasife alındı' : ''}</small><small>${row.email ? escapeHtml(row.email) : 'e-posta yok'}</small><small>${row.created_at ? 'Kayıt: ' + day(row.created_at) + ' · ' : ''}${row.last_login ? 'Son giriş: ' + day(row.last_login) : 'Henüz giriş yapmadı'}</small></div>`;
   /* Aktif ve pasif hesaplar ayrı listelenir; pasif hesabın yetki alanı ve
      parolası değiştirilmez, yalnızca aktife alınır ya da silinir. */
   const draw = (list, counter, passive, empty) => {
@@ -911,7 +911,7 @@ function renderUsers() {
       : `<select data-role="city" aria-label="${escapeHtml(row.username)} yetki alanı">${cityOptions.map(city => `<option value="${escapeHtml(city)}"${city === (row.city || '') ? ' selected' : ''}>${city ? escapeHtml(city) : 'Merkez (tüm iller)'}</option>`).join('')}</select>`}</div>
     <div class="user-actions">${passive
       ? `<button type="button" data-role="activate">Aktife al</button><button type="button" class="danger" data-role="remove">Sil</button>`
-      : `<button type="button" data-role="rename">Ad soyad</button>${row.self ? '' : `<button type="button" data-role="reset">Parola ver</button><button type="button" data-role="passive">Pasife al</button><button type="button" class="danger" data-role="remove">Sil</button>`}`}</div>
+      : `<button type="button" data-role="rename">Ad soyad / e-posta</button>${row.self ? '' : `<button type="button" data-role="reset">Parola ver</button><button type="button" data-role="passive">Pasife al</button><button type="button" class="danger" data-role="remove">Sil</button>`}`}</div>
   </div>`).join('') : `<div class="user-row">${query ? 'Aramanızla eşleşen hesap yok.' : empty}</div>`;
   };
   draw('#users-list', '#users-count', false, 'Aktif hesap yok.');
@@ -934,6 +934,7 @@ async function usersAction(target) {
       form.reset();
       form.elements.firstName.value = record?.first_name || '';
       form.elements.lastName.value = record?.last_name || '';
+      form.elements.email.value = record?.email || '';
       $('#rename-lede').textContent = `${record?.username || name} hesabının ad ve soyadı; giriş yine T.C. kimlik numarasıyla yapılır.`;
       form.querySelector('.error').textContent = '';
       $('#rename-dialog').showModal();
@@ -990,7 +991,7 @@ $('#rename-form').onsubmit = submitHandler(async form => {
   await api('api/users/' + id, { method: 'PUT', body: JSON.stringify(Object.fromEntries(new FormData(form))) });
   renameTarget = null;
   $('#rename-dialog').close();
-  $('#users-error').textContent = 'Ad soyad güncellendi.';
+  $('#users-error').textContent = 'Ad soyad ve e-posta güncellendi.';
   if (self) await identity();
   await loadUsers();
 });

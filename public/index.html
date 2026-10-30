@@ -184,12 +184,13 @@
 
 <dialog id="rename-dialog">
   <form id="rename-form">
-    <div class="dialog-top"><h2>Ad soyad</h2><button type="button" class="close" data-close aria-label="Kapat">×</button></div>
+    <div class="dialog-top"><h2>Ad soyad ve e-posta</h2><button type="button" class="close" data-close aria-label="Kapat">×</button></div>
     <p id="rename-lede"></p>
     <div class="form-row">
       <label>Ad<input name="firstName" required maxlength="60" autocomplete="off"></label>
       <label>Soyad<input name="lastName" required maxlength="60" autocomplete="off"></label>
     </div>
+    <label>E-posta<input name="email" type="email" maxlength="150" autocomplete="off"><small>"Şifremi unuttum" bağlantısı bu adrese gider. Boş bırakılırsa kişi parolasını kendisi sıfırlayamaz.</small></label>
     <p class="error" role="alert"></p>
     <button class="button button-primary" type="submit">Kaydet</button>
   </form>
