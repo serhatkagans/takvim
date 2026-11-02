@@ -93,8 +93,8 @@ const server = createServer(async (req, res) => {
   }
 });
 
-/* Drive'a 50 MB'lık dosya yavaş bağlantıda dakikalar sürebilir; başlıklar
+/* Drive'a 250 MB'lık dosya yavaş bağlantıda yarım saat sürebilir; başlıklar
    yine 10 saniyede gelmeli, gövde boyutunu da her uç kendisi sınırlar. */
-server.requestTimeout = 600000; server.headersTimeout = 10000;
+server.requestTimeout = 1800000; server.headersTimeout = 10000;
 server.listen(port, process.env.HOST || '127.0.0.1', () => console.log(`GençTek takvimi: ${origin}${basePath} (${db.kind})`));
 for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => server.close(async () => { await db.close(); process.exit(0); }));

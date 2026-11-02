@@ -26,7 +26,7 @@ const numberFormat = new Intl.NumberFormat('tr-TR', { maximumFractionDigits: 1 }
 const todayTr = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Istanbul' }).format(new Date());
 const dayText = day => longDay.format(new Date(day + 'T12:00:00'));
 const expiryText = day => (day < todayTr() ? ' · süresi doldu' : ` · ${dayText(day)} sonuna kadar`);
-const MAX_FILE_MB = 50;
+const MAX_FILE_MB = 250;
 /* Arama Türkçe harflerden bağımsızdır ("ozet" → "Özet"); sunucudaki fold ile aynı. */
 const FOLD = { ç: 'c', ğ: 'g', ı: 'i', ö: 'o', ş: 's', ü: 'u', â: 'a', î: 'i', û: 'u' };
 const fold = text => String(text ?? '').toLocaleLowerCase('tr-TR').replace(/[çğıöşüâîû]/g, c => FOLD[c]);
