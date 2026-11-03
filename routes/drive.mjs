@@ -1,9 +1,13 @@
 import { ValidationError, validDay, cities as ALL_CITIES } from '../lib/data.mjs';
 import { todayTr } from '../lib/forms.mjs';
 import { displayName } from '../lib/users.mjs';
-import { send, body, rawBody } from '../lib/http.mjs';
-import { zip } from '../lib/zip.mjs';
-import { MAX_DRIVE_FILE, DRIVE_QUOTA, MAX_ZIP_BYTES, MAX_VERSIONS, ROLES, MEMBER_ROLES, KINDS, DATES, INLINE_TYPES, cleanName, typeOf, newToken, validToken, loadTree, ancestry, isLive, childrenOf, subtree, zipEntries, uniquePaths, accessOf, visiblePath, canEdit, canAdd, matcher, within, rankOf } from '../lib/drive.mjs';
+import { createReadStream } from 'node:fs';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { crc32 } from 'node:zlib';
+import { send, body } from '../lib/http.mjs';
+import { zipStream } from '../lib/zip.mjs';
+import { MAX_DRIVE_FILE, DRIVE_QUOTA, DISK_RESERVE, MAX_ZIP_BYTES, MAX_VERSIONS, ROLES, MEMBER_ROLES, KINDS, DATES, INLINE_TYPES, cleanName, typeOf, newToken, validToken, loadTree, ancestry, isLive, childrenOf, subtree, zipEntries, uniquePaths, accessOf, visiblePath, canEdit, canAdd, matcher, within, rankOf } from '../lib/drive.mjs';
 
 const gecersiz = message => { throw new ValidationError(message); };
 
@@ -51,25 +55,66 @@ const rank = rankOf;
  *   GET    /api/drive/:id/etkinlik    öğenin işlem geçmişi; klasörde içindekiler de (?once=kayıt)
  *   GET    /api/drive/etkinlik        bütün Drive'ın işlem geçmişi (merkez)
  */
-export function driveRoutes({ db }) {
+export function driveRoutes({ db, store }) {
   async function people() {
     const rows = await db.all('SELECT id,username,first_name,last_name FROM users');
     return new Map(rows.map(row => [Number(row.id), displayName(row)]));
   }
 
-  /* Kota eski sürümleri de sayar: onlar da veritabanında yer kaplar. */
+  /* Kota eski sürümleri de sayar: onlar da diskte yer kaplar. */
   const usage = async () => Number((await db.get('SELECT COALESCE(SUM(size),0) AS n FROM drive_items')).n) + Number((await db.get('SELECT COALESCE(SUM(size),0) AS n FROM drive_versions')).n);
 
   /** Dosyanın o anki içeriğini sürüm geçmişine taşır; dosya başına son MAX_VERSIONS sürüm kalır. */
   async function keepVersion(id, by, now) {
-    await db.run('INSERT INTO drive_versions(item_id,type,size,data,created,created_by,replaced_at,replaced_by) SELECT id,type,size,data,updated,updated_by,?,? FROM drive_items WHERE id=?', [now, by, id]);
-    const old = await db.all('SELECT id FROM drive_versions WHERE item_id=? ORDER BY id DESC', [id]);
-    const extra = old.slice(MAX_VERSIONS).map(row => row.id);
-    if (extra.length) await db.run(`DELETE FROM drive_versions WHERE id IN (${extra.map(() => '?').join(',')})`, extra);
+    /* İçerik kopyalanmaz: diskteki dosyanın anahtarı sürüm satırına geçer. */
+    await db.run('INSERT INTO drive_versions(item_id,type,size,file_key,created,created_by,replaced_at,replaced_by) SELECT id,type,size,file_key,updated,updated_by,?,? FROM drive_items WHERE id=?', [now, by, id]);
+    const old = await db.all('SELECT id,file_key FROM drive_versions WHERE item_id=? ORDER BY id DESC', [id]);
+    const extra = old.slice(MAX_VERSIONS);
+    if (!extra.length) return;
+    await db.run(`DELETE FROM drive_versions WHERE id IN (${extra.map(() => '?').join(',')})`, extra.map(row => row.id));
+    await store.remove(extra.map(row => row.file_key));
   }
 
   async function checkQuota(extra) {
     if (await usage() + extra > DRIVE_QUOTA) gecersiz(`Drive dolu (${Math.round(DRIVE_QUOTA / 1073741824)} GB). Çöp kutusunu boşaltın ya da eski dosyaları silin.`);
+    /* Disk komşu uygulamalarla ortak: kota dolmasa da disk dolmasın. */
+    if (await store.free() - extra < DISK_RESERVE) gecersiz('Sunucu diskinde yer kalmadı; yöneticiye haber verin.');
+  }
+
+  /** Gövdeyi diske yazar. Bildirilen boyut sınırı aşıyorsa hiç okumadan reddeder. */
+  async function receive(req) {
+    const declared = Number(req.headers['content-length'] || 0);
+    if (declared > MAX_DRIVE_FILE) gecersiz(`Dosya en fazla ${MAX_DRIVE_FILE / 1048576} MB olabilir.`);
+    await checkQuota(declared);
+    return store.save(req, MAX_DRIVE_FILE);
+  }
+
+  /** Veritabanı yazımı başarısız olursa diske yazılmış içerik ortada kalmasın. */
+  async function orDrop(key, work) {
+    try { return await work(); } catch (error) { await store.remove([key]); throw error; }
+  }
+
+  /**
+   * Diskteki içeriği gönderir. Tek aralıklı Range isteğini karşılar: video
+   * ileri sarılır, kesilen büyük indirme kaldığı yerden sürer.
+   */
+  async function sendContent(req, res, key, headers) {
+    const size = key ? await store.size(key) : 0;
+    if (size === null) return send(res, 404, { error: 'Dosyanın içeriği bulunamadı.' });
+    let start = 0, end = size - 1, status = 200;
+    const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
+    if (range && (range[1] || range[2]) && size > 0) {
+      if (range[1]) { start = Number(range[1]); end = range[2] ? Math.min(Number(range[2]), size - 1) : size - 1; }
+      else start = Math.max(0, size - Number(range[2]));
+      if (start > end) { res.writeHead(416, { 'Content-Range': `bytes */${size}` }); return res.end(); }
+      status = 206;
+      headers['Content-Range'] = `bytes ${start}-${end}/${size}`;
+    }
+    res.writeHead(status, { ...headers, 'Accept-Ranges': 'bytes', 'Content-Length': end - start + 1 });
+    if (req.method === 'HEAD' || !size) return res.end();
+    /* İndirmeyi yarıda bırakan istemci hata sayılmaz. */
+    await pipeline(store.read(key, { start, end }), res).catch(() => res.destroy());
+    return true;
   }
 
   const fileName = req => { try { return decodeURIComponent(String(req.headers['x-file-name'] || '')); } catch { return ''; } };
@@ -77,13 +122,25 @@ export function driveRoutes({ db }) {
   async function removeItems(ids) {
     for (let i = 0; i < ids.length; i += 200) {
       const part = ids.slice(i, i + 200), marks = part.map(() => '?').join(',');
+      const keys = [
+        ...(await db.all(`SELECT file_key FROM drive_items WHERE id IN (${marks})`, part)),
+        ...(await db.all(`SELECT file_key FROM drive_versions WHERE item_id IN (${marks})`, part)),
+      ].map(row => row.file_key);
       await db.run(`DELETE FROM drive_stars WHERE item_id IN (${marks})`, part);
       await db.run(`DELETE FROM drive_members WHERE item_id IN (${marks})`, part);
       await db.run(`DELETE FROM drive_groups WHERE item_id IN (${marks})`, part);
       await db.run(`DELETE FROM drive_versions WHERE item_id IN (${marks})`, part);
       /* İşlem geçmişi bilerek silinmez: "bunu kim sildi?" sorusunun yanıtı orada. */
       await db.run(`DELETE FROM drive_items WHERE id IN (${marks})`, part);
+      await store.remove(keys);
     }
+  }
+
+  /** Dosyanın CRC32'si (ZIP yerel başlığı içerikten önce yazılır). */
+  async function checksum(path) {
+    let value = 0;
+    for await (const chunk of createReadStream(path, { highWaterMark: 1 << 20 })) value = crc32(chunk, value);
+    return value;
   }
 
   /** Seçilen öğeleri (klasörler içleriyle) tek ZIP'te gönderir. */
@@ -91,15 +148,27 @@ export function driveRoutes({ db }) {
     const entries = uniquePaths(ids.flatMap(id => zipEntries(tree, id, visible)));
     const total = entries.reduce((sum, entry) => sum + (entry.id ? tree.get(entry.id).size : 0), 0);
     if (total > MAX_ZIP_BYTES) gecersiz(`Seçilenler toplam ${Math.round(MAX_ZIP_BYTES / 1048576)} MB'ı aşıyor; daha az öğe seçip yeniden deneyin.`);
+    if (entries.length >= 65000) gecersiz('Seçilenlerde çok fazla dosya var; daha az öğe seçip yeniden deneyin.');
     const fileIds = entries.filter(entry => entry.id).map(entry => entry.id);
-    const data = new Map();
-    for (let i = 0; i < fileIds.length; i += 50) {
-      const part = fileIds.slice(i, i + 50);
-      for (const row of await db.all(`SELECT id,data FROM drive_items WHERE id IN (${part.map(() => '?').join(',')})`, part)) data.set(Number(row.id), Buffer.from(row.data || []));
+    const keys = new Map();
+    for (let i = 0; i < fileIds.length; i += 200) {
+      const part = fileIds.slice(i, i + 200);
+      for (const row of await db.all(`SELECT id,file_key FROM drive_items WHERE id IN (${part.map(() => '?').join(',')})`, part)) keys.set(Number(row.id), row.file_key);
     }
-    const file = zip(entries.map(entry => ({ name: entry.path, data: entry.id ? data.get(entry.id) : Buffer.alloc(0) })));
-    res.writeHead(200, { 'Content-Type': 'application/zip', 'Content-Length': file.length, 'Content-Disposition': disposition('attachment', name), 'Cache-Control': 'private, no-store' });
-    return res.end(req.method === 'HEAD' ? undefined : file);
+    const files = [];
+    for (const entry of entries) {
+      const key = entry.id ? keys.get(entry.id) : null;
+      const size = key ? await store.size(key) : 0;
+      /* Diskte bulunamayan içerik boş dosya olarak girer, arşivin kalanı iner. */
+      if (!key || size === null) { files.push({ name: entry.path, size: 0, crc: 0 }); continue; }
+      const path = store.pathOf(key);
+      files.push({ name: entry.path, size, crc: req.method === 'HEAD' ? 0 : await checksum(path), read: () => createReadStream(path, { highWaterMark: 1 << 20 }) });
+    }
+    const archive = zipStream(files);
+    res.writeHead(200, { 'Content-Type': 'application/zip', 'Content-Length': archive.length, 'Content-Disposition': disposition('attachment', name), 'Cache-Control': 'private, no-store' });
+    if (req.method === 'HEAD') return res.end();
+    await pipeline(Readable.from(archive.chunks()), res).catch(() => res.destroy());
+    return true;
   }
 
   const ACTIVITY_PAGE = 50;
@@ -306,14 +375,11 @@ export function driveRoutes({ db }) {
       if (req.method !== 'POST') return send(res, 405, { error: 'Geçersiz işlem.' });
       const parent = targetFolder(url.searchParams.get('ust'));
       const name = cleanName(fileName(req), 'Dosya adı');
-      const declared = Number(req.headers['content-length'] || 0);
-      if (declared > MAX_DRIVE_FILE) gecersiz(`Dosya en fazla ${MAX_DRIVE_FILE / 1048576} MB olabilir.`);
-      await checkQuota(declared);
-      const data = await rawBody(req, MAX_DRIVE_FILE);
-      const row = await db.get('INSERT INTO drive_items(parent_id,kind,name,type,size,data,created_by,created,updated,updated_by) VALUES(?,?,?,?,?,?,?,?,?,?) RETURNING id',
-        [parent, 'file', name, typeOf(name), data.length, data, by, now, now, by]);
-      await logAction(Number(row.id), 'upload', { name, kind: 'file', size: data.length }, parent);
-      return send(res, 201, { id: Number(row.id), name, size: data.length });
+      const { key, size } = await receive(req);
+      const row = await orDrop(key, () => db.get('INSERT INTO drive_items(parent_id,kind,name,type,size,file_key,created_by,created,updated,updated_by) VALUES(?,?,?,?,?,?,?,?,?,?) RETURNING id',
+        [parent, 'file', name, typeOf(name), size, key, by, now, now, by]));
+      await logAction(Number(row.id), 'upload', { name, kind: 'file', size }, parent);
+      return send(res, 201, { id: Number(row.id), name, size });
     }
 
     if (head === 'indir') {
@@ -353,13 +419,11 @@ export function driveRoutes({ db }) {
     if (action === 'indir') {
       if (!readOnly) return send(res, 405, { error: 'Geçersiz işlem.' });
       if (item.kind === 'folder') return sendZip(req, res, tree, [id], item.name + '.zip', visible);
-      const row = await db.get('SELECT data FROM drive_items WHERE id=?', [id]);
-      const data = Buffer.from(row.data || []);
+      const row = await db.get('SELECT file_key FROM drive_items WHERE id=?', [id]);
       const inline = url.searchParams.get('goster') === '1' && INLINE_TYPES.has(item.type);
       res.setHeader('Content-Security-Policy', FILE_CSP);
-      res.writeHead(200, { 'Content-Type': item.type + (item.type.startsWith('text/') ? '; charset=utf-8' : ''), 'Content-Length': data.length,
+      return sendContent(req, res, row.file_key, { 'Content-Type': item.type + (item.type.startsWith('text/') ? '; charset=utf-8' : ''),
         'Content-Disposition': disposition(inline ? 'inline' : 'attachment', item.name), 'Cache-Control': 'private, no-cache' });
-      return res.end(req.method === 'HEAD' ? undefined : data);
     }
 
     if (action === 'kisiler') {
@@ -473,7 +537,9 @@ export function driveRoutes({ db }) {
       if (!canAdd(parentRole)) return send(res, 403, { error: 'Kopya bu dosyanın klasörüne düşer; orada düzenleme yetkiniz yok.' });
       await checkQuota(item.size);
       const name = item.name.replace(/(\.[^.]*)?$/, ' kopyası$1').slice(0, 200);
-      const row = await db.get('INSERT INTO drive_items(parent_id,kind,name,type,size,data,created_by,created,updated,updated_by) SELECT parent_id,kind,?,type,size,data,?,?,?,? FROM drive_items WHERE id=? RETURNING id', [name, by, now, now, by, id]);
+      const source = await db.get('SELECT file_key FROM drive_items WHERE id=?', [id]);
+      const key = source.file_key ? await store.copy(source.file_key) : null;
+      const row = await orDrop(key, () => db.get('INSERT INTO drive_items(parent_id,kind,name,type,size,file_key,created_by,created,updated,updated_by) SELECT parent_id,kind,?,type,size,?,?,?,?,? FROM drive_items WHERE id=? RETURNING id', [name, key, by, now, now, by, id]));
       await logAction(Number(row.id), 'copy', { name, kind: 'file', from: item.name }, item.parent_id);
       return send(res, 201, { id: Number(row.id), name });
     }
@@ -482,15 +548,14 @@ export function driveRoutes({ db }) {
       if (req.method !== 'POST') return send(res, 405, { error: 'Geçersiz işlem.' });
       if (!canEdit(role)) return noEdit();
       if (item.kind !== 'file' || trashed) gecersiz('Yalnızca dosyanın yeni sürümü yüklenebilir.');
-      const declared = Number(req.headers['content-length'] || 0);
-      if (declared > MAX_DRIVE_FILE) gecersiz(`Dosya en fazla ${MAX_DRIVE_FILE / 1048576} MB olabilir.`);
       /* Eski içerik silinmez, sürüm geçmişine gider: kota ikisini birden sayar. */
-      await checkQuota(declared);
-      const data = await rawBody(req, MAX_DRIVE_FILE);
-      await keepVersion(id, by, now);
-      await db.run('UPDATE drive_items SET data=?,size=?,updated=?,updated_by=? WHERE id=?', [data, data.length, now, by, id]);
-      await logAction(id, 'version', { name: item.name, kind: 'file', size: data.length }, item.parent_id);
-      return send(res, 200, { size: data.length, updated: now });
+      const { key, size } = await receive(req);
+      await orDrop(key, async () => {
+        await keepVersion(id, by, now);
+        await db.run('UPDATE drive_items SET file_key=?,size=?,updated=?,updated_by=? WHERE id=?', [key, size, now, by, id]);
+      });
+      await logAction(id, 'version', { name: item.name, kind: 'file', size }, item.parent_id);
+      return send(res, 200, { size, updated: now });
     }
 
     /* Sürüm geçmişi: görüntüleyen göremez (Google'daki gibi düzenleyenlerindir). */
@@ -508,28 +573,29 @@ export function driveRoutes({ db }) {
           max: MAX_VERSIONS,
         });
       }
-      const version = await db.get('SELECT id,type,size,data,created FROM drive_versions WHERE id=? AND item_id=?', [Number(sub), id]);
+      const version = await db.get('SELECT id,type,size,file_key,created FROM drive_versions WHERE id=? AND item_id=?', [Number(sub), id]);
       if (!version) return send(res, 404, { error: 'Sürüm bulunamadı.' });
       if (readOnly) {
-        const data = Buffer.from(version.data || []);
         /* İndirilen eski sürümün adına tarihi eklenir: "rapor (2026-10-01 14.05).pdf". */
         const stamp = new Date(version.created).toLocaleString('sv-SE', { timeZone: 'Europe/Istanbul' }).slice(0, 16).replace(':', '.');
         const name = item.name.replace(/(\.[^.]*)?$/, ` (${stamp})$1`);
         res.setHeader('Content-Security-Policy', FILE_CSP);
-        res.writeHead(200, { 'Content-Type': version.type, 'Content-Length': data.length, 'Content-Disposition': disposition('attachment', name), 'Cache-Control': 'private, no-store' });
-        return res.end(req.method === 'HEAD' ? undefined : data);
+        return sendContent(req, res, version.file_key, { 'Content-Type': version.type, 'Content-Disposition': disposition('attachment', name), 'Cache-Control': 'private, no-store' });
       }
       if (req.method === 'DELETE') {
         if (!owner) return onlyOwner();
         await db.run('DELETE FROM drive_versions WHERE id=?', [version.id]);
+        await store.remove([version.file_key]);
         await logAction(id, 'version_delete', { name: item.name, kind: 'file', version: version.created }, item.parent_id);
         return send(res, 200, { ok: true });
       }
       if (req.method !== 'POST') return send(res, 405, { error: 'Geçersiz işlem.' });
-      /* Geri yükleme: o anki içerik geçmişe gider, seçilen sürüm geçerli olur. */
-      await keepVersion(id, by, now);
-      await db.run('UPDATE drive_items SET data=(SELECT v.data FROM drive_versions v WHERE v.id=?),size=?,type=?,updated=?,updated_by=? WHERE id=?', [version.id, Number(version.size), version.type, now, by, id]);
+      /* Geri yükleme: o anki içerik geçmişe gider, seçilen sürüm geçerli olur.
+         Seçilen satır önce çıkarılır: geçmiş doluyken en eski sürüm geri
+         yükleniyorsa keepVersion onu budayıp içeriğini silmesin. */
       await db.run('DELETE FROM drive_versions WHERE id=?', [version.id]);
+      await keepVersion(id, by, now);
+      await db.run('UPDATE drive_items SET file_key=?,size=?,type=?,updated=?,updated_by=? WHERE id=?', [version.file_key, Number(version.size), version.type, now, by, id]);
       await logAction(id, 'version_restore', { name: item.name, kind: 'file', version: version.created }, item.parent_id);
       return send(res, 200, { updated: now, size: Number(version.size) });
     }

@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { cities, places, scopes, categories, subtypes, groups, passiveGroups, statuses, NATIONWIDE, INTERNATIONAL, CENTER, ValidationError, MAX_RANGE_DAYS, MIN_PASSWORD } from './lib/data.mjs';
 import { openDb } from './lib/db.mjs';
+import { openStore, moveDriveContent } from './lib/drivestore.mjs';
 import { displayName } from './lib/users.mjs';
 import { send, digest, sessionToken, sameOrigin } from './lib/http.mjs';
 import { port, origin, basePath } from './lib/ayar.mjs';
@@ -27,7 +28,10 @@ const logo = await readFile(new URL('./public/genctek.png', import.meta.url));
 const etkinlik = etkinlikRoutes({ db, logo });
 const oturum = oturumRoutes({ db });
 const { handle: form, formList } = formRoutes({ db });
-const drive = driveRoutes({ db });
+/* Drive içeriği diskte; eski sürümlerden kalan veritabanı içeriği dinlemeden önce taşınır. */
+const store = await openStore();
+await moveDriveContent(db, store);
+const drive = driveRoutes({ db, store });
 
 /* ---- Statik dosyalar ---------------------------------------------------
    Takvim yalnızca oturum açmış kullanıcıya gönderilir: "/" oturumsuzken
@@ -93,8 +97,8 @@ const server = createServer(async (req, res) => {
   }
 });
 
-/* Drive'a 250 MB'lık dosya yavaş bağlantıda yarım saat sürebilir; başlıklar
+/* Drive'a 1 GB'lık dosya yavaş bağlantıda saatler sürebilir; başlıklar
    yine 10 saniyede gelmeli, gövde boyutunu da her uç kendisi sınırlar. */
-server.requestTimeout = 1800000; server.headersTimeout = 10000;
+server.requestTimeout = 3 * 3600000; server.headersTimeout = 10000;
 server.listen(port, process.env.HOST || '127.0.0.1', () => console.log(`GençTek takvimi: ${origin}${basePath} (${db.kind})`));
 for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => server.close(async () => { await db.close(); process.exit(0); }));

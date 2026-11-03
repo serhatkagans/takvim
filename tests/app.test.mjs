@@ -10,6 +10,7 @@ import { inflateRawSync, crc32 } from 'node:zlib';
 import { hashPassword, cities, places, groups, categories, subtypes, validateEvent, validFilters, filterSql, NATIONWIDE, INTERNATIONAL, GROUP_KIND, ValidationError } from '../lib/data.mjs';
 import { validTc, maskUsername } from '../lib/users.mjs';
 import { openDb } from '../lib/db.mjs';
+import { openStore, moveDriveContent } from '../lib/drivestore.mjs';
 import { buildIcs } from '../lib/ics.mjs';
 import { validateForm, validateAnswers, accepting, targets } from '../lib/forms.mjs';
 
@@ -857,6 +858,8 @@ for (const backend of backends) test(`Drive uçtan uca (${backend.name}): yetki,
     const port = socket.address().port; await new Promise(r => socket.close(r));
     const origin = `http://127.0.0.1:${port}`;
     child = spawn(process.execPath, ['server.mjs'], { env: { ...process.env, PORT: String(port), HOST: '127.0.0.1', PUBLIC_ORIGIN: origin, DATA_DIR: dir, DATABASE_URL: backend.url || '' }, stdio: ['ignore', 'pipe', 'pipe'] });
+    /* Diskteki Drive içerik dosyaları (yarım yüklemeler tmp/ altında, sayılmaz). */
+    const diskFiles = () => readdirSync(join(dir, 'drive')).filter(name => name !== 'tmp').reduce((sum, sub) => sum + readdirSync(join(dir, 'drive', sub)).length, 0);
     let stderr = '';
     child.stderr.on('data', chunk => { stderr += chunk; });
     await Promise.race([
@@ -913,6 +916,16 @@ for (const backend of backends) test(`Drive uçtan uca (${backend.name}): yetki,
     assert.match(file.headers.get('content-security-policy'), /frame-ancestors 'self'/);
     const script = await call(`/api/drive/${html}/indir?goster=1`, { cookie: admin });
     assert.match(script.headers.get('content-disposition'), /^attachment/, 'HTML dosyası hiçbir zaman sayfa olarak açılmaz');
+
+    /* İçerik diskte durur, veritabanında değil; aralıklı indirme (video, kaldığı yerden sürme) */
+    assert.equal(diskFiles(), 3, 'her yüklenen dosya diske yazılır');
+    const part = await fetch(`${origin}/api/drive/${ozet}/indir`, { headers: { Cookie: admin, Range: 'bytes=0-6' } });
+    assert.equal(part.status, 206);
+    assert.equal(part.headers.get('content-range'), `bytes 0-6/${Buffer.byteLength('merhaba dünya')}`);
+    assert.equal(await part.text(), 'merhaba');
+    const tail = await fetch(`${origin}/api/drive/${ozet}/indir`, { headers: { Cookie: admin, Range: 'bytes=-6' } });
+    assert.equal(await tail.text(), 'dünya', 'son 6 bayt (ü iki bayt)');
+    assert.equal((await fetch(`${origin}/api/drive/${ozet}/indir`, { headers: { Cookie: admin, Range: 'bytes=999-' } })).status, 416);
     assert.equal(script.headers.get('content-type'), 'application/octet-stream');
     await script.arrayBuffer();
 
@@ -1067,11 +1080,13 @@ for (const backend of backends) test(`Drive uçtan uca (${backend.name}): yetki,
 
     /* Kalıcı silme ve çöpü boşaltma */
     const before = (await json('/api/drive', { cookie: admin })).body.used;
+    const filesBefore = diskFiles();
     await call(`/api/drive/${gizli}`, { method: 'PUT', data: { trashed: true }, cookie: admin });
     assert.equal((await call('/api/drive/cop', { method: 'DELETE', cookie: izmir })).status, 403);
     const emptied = (await json('/api/drive/cop', { method: 'DELETE', cookie: admin })).body;
     assert.ok(emptied.removed >= 4, 'çöpteki klasörler içleriyle silinir');
     assert.ok((await json('/api/drive', { cookie: admin })).body.used < before, 'kullanılan alan azalır');
+    assert.ok(diskFiles() < filesBefore, 'kalıcı silinen dosyanın içeriği diskten de silinir');
     assert.equal((await json('/api/drive?gorunum=cop', { cookie: admin })).body.items.length, 0);
     assert.equal((await call(`/api/drive/${gizli}/indir`, { cookie: admin })).status, 404);
 
@@ -1185,6 +1200,29 @@ for (const backend of backends) test(`Drive uçtan uca (${backend.name}): yetki,
     assert.deepEqual((await json(`/api/drive?gorunum=ara&tur=pdf&pay=${renewed.link}`)).body.items, [], 'bağlantıyla gelen yalnızca paylaşılan klasörde arar');
   } finally {
     if (child && child.exitCode === null) { child.kill(); await once(child, 'exit'); }
+    try { rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }); } catch {}
+  }
+});
+
+/* v2.13 öncesi Drive içeriği veritabanının `data` sütunundaydı: açılışta diske
+   taşınır, sütun boşaltılır, ikinci açılışta hiçbir şey yapılmaz. */
+test('eski Drive içeriği veritabanından diske taşınır', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'takvim-tasima-'));
+  try {
+    const db = await openDb({ url: '', dir });
+    const file = await db.get("INSERT INTO drive_items(kind,name,type,size,data,created,updated) VALUES('file','a.txt','text/plain',5,?,'2026-10-01','2026-10-01') RETURNING id", [Buffer.from('güncel')]);
+    await db.run("INSERT INTO drive_items(kind,name,created,updated) VALUES('folder','Klasör','2026-10-01','2026-10-01')");
+    await db.run("INSERT INTO drive_versions(item_id,type,size,data,created,replaced_at) VALUES(?,'text/plain',4,?,'2026-09-01','2026-10-01')", [file.id, Buffer.from('eski')]);
+    const store = await openStore(join(dir, 'drive'));
+    assert.equal(await moveDriveContent(db, store), 2, 'dosya ve eski sürümü taşınır, klasör atlanır');
+    const item = await db.get('SELECT data,file_key FROM drive_items WHERE id=?', [file.id]);
+    assert.equal(item.data, null, 'veritabanındaki içerik boşaltılır');
+    assert.equal(readFileSync(store.pathOf(item.file_key), 'utf8'), 'güncel');
+    const version = await db.get('SELECT data,file_key FROM drive_versions WHERE item_id=?', [file.id]);
+    assert.equal(readFileSync(store.pathOf(version.file_key), 'utf8'), 'eski');
+    assert.equal(await moveDriveContent(db, store), 0, 'ikinci açılışta taşınacak bir şey yok');
+    await db.close();
+  } finally {
     try { rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }); } catch {}
   }
 });
