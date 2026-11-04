@@ -43,7 +43,7 @@ const expandedLists = new Set();
    sayılar ve takvim aynı kalır, yalnızca altta o değerin etkinlikleri açılır. */
 const pickedPills = new Map();
 /* Süzgeç kutuları (arama ve takvim üstündeki kapsam / il); "Filtreleri temizle" hepsini boşaltır. */
-const FILTERS = ['#search', '#city-pick'];
+const FILTERS = ['#search', '#city-pick', '#online-pick'];
 const anyFilter = () => FILTERS.some(selector => $(selector).value) || $('#mine').checked || period !== null || pickedPills.size > 0 || openStat !== null;
 /* Çok illi ortak etkinlik takvim kutucuğunu taşırmasın. */
 const placeLabel = e => (listOf(e.cities).length > 3 ? `${listOf(e.cities).length} il ortak` : e.city);
@@ -126,12 +126,13 @@ const inPlace = (e, place) => !place || (meta.scopes.includes(place) ? e.scope =
 /** Kayıtların kapsam / il seçimine ve arama metnine göre süzülmesi.
     Birden çok ile bağlı etkinlik her ilinde (düzenleyen ya da katılan) görünür. */
 function filtered(source = events) {
-  const query = $('#search').value.toLocaleLowerCase('tr-TR'), place = $('#city-pick').value;
+  const query = $('#search').value.toLocaleLowerCase('tr-TR'), place = $('#city-pick').value, online = $('#online-pick').value;
   /* "Yalnızca benim eklediklerim": kutu yalnızca il yöneticisinde görünür,
      `owner` alanı da yalnızca giriş yapmış kullanıcıya gönderilir. */
   const mine = $('#mine').checked && meta.user ? meta.user.id : null;
   return source.filter(e =>
     (!mine || e.owner === mine) &&
+    (!online || String(Number(!!e.online)) === online) &&
     inPlace(e, place) && searchText(e).includes(query));
 }
 
@@ -804,6 +805,7 @@ $('#month-view').onclick = () => { mode = 'month'; render(); };
 $('#list-view').onclick = () => { mode = 'list'; render(); };
 
 $('#city-pick').addEventListener('change', () => meta && render());
+$('#online-pick').addEventListener('change', () => meta && render());
 $('#search').addEventListener('input', () => meta && render());
 $('#month-pick').addEventListener('change', event => { month.setMonth(Number(event.target.value)); reload(); });
 $('#year-pick').addEventListener('change', event => { month.setFullYear(Number(event.target.value)); reload(); });
