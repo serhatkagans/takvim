@@ -119,6 +119,10 @@
           <button id="month-view" aria-pressed="true">Ay</button>
           <button id="list-view" aria-pressed="false">Liste</button>
         </div>
+        <div class="view-checks">
+          <label class="check"><input id="hide-done" type="checkbox"> Tamamlanan etkinlikleri gösterme</label>
+          <label class="check" title="Ay görünümünde ayın ilk gününden, tarih aralığında başlangıç tarihinden önce başlamış (o döneme uzanan) etkinlikler gizlenir"><input id="starts-in" type="checkbox"> Yalnızca seçilen tarihten itibaren başlayanları göster</label>
+        </div>
       </div>
       <p id="status" role="status"></p>
       <div id="calendar"></div>
@@ -225,6 +229,10 @@
     </div>
     <label>Kapsam / il<select name="city"></select></label>
     <label>Etkinlik adı ara <small>isteğe bağlı · yalnızca etkinlik adında arar</small><input name="search" type="search" maxlength="100" placeholder="Örn. Tek Maraton"></label>
+    <div class="report-checks">
+      <label class="check"><input name="hideDone" type="checkbox" value="1"> Tamamlanan etkinlikleri rapora alma</label>
+      <label class="check" title="Başlangıç tarihinden önce başlamış, döneme yalnızca uzanan etkinlikler rapora girmez"><input name="startsIn" type="checkbox" value="1"> Yalnızca başlangıç tarihinden itibaren başlayanları al</label>
+    </div>
     <!-- Aramayla eşleşenler: rapora yalnızca işaretli olanlar girer. -->
     <fieldset class="choice" id="report-matches-field" hidden>
       <legend>Rapora girecek etkinlikler <small id="report-matches-count"></small></legend>

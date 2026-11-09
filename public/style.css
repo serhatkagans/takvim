@@ -126,6 +126,9 @@ p { margin-top: 0 }
 .login-card .text-link { justify-self: center }
 .notice { margin: 0; padding: 12px 14px; border: 1px solid var(--color-brand); border-radius: 8px; background: color-mix(in srgb, var(--color-brand) 8%, var(--color-surface)); color: var(--color-text-strong); font-size: .88rem }
 .range-pick { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: .82rem; color: var(--color-text-muted) }
+.view-checks, .report-checks { display: flex; gap: 6px 18px; flex-wrap: wrap; font-size: .85rem }
+.view-checks { flex-basis: 100% }
+.report-checks { margin: 4px 0 12px }
 .range-pick input { padding: 6px 8px; border: 1px solid var(--color-border-strong); border-radius: 8px; background: var(--color-surface); font: inherit }
 .grid-title { margin: 18px 24px 6px; font-size: 1rem; color: var(--color-text-strong) }
 .grid-title:first-child { margin-top: 0 }

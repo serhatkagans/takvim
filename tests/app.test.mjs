@@ -536,6 +536,14 @@ for (const backend of backends) test(`uçtan uca (${backend.name}): okuma, oturu
     const arananXml = aranan['xl/worksheets/sheet1.xml'].toString('utf8');
     assert.ok(arananXml.includes('Ortak robotik atölyesi') && !arananXml.includes('Yapay zekâ tanışma toplantısı'), 'arama raporu süzer');
     assert.equal((await request('/api/rapor?bas=2026-09-01&bit=2026-10-31&ara=r', 'GET', null, cookie)).status, 400, 'tek harfle arama');
+    /* Görünüm kutuları: 16 Eylül'de başlayıp 17'sine uzanan kayıt 17 Eylül'den
+       başlayan dönemde "yalnızca dönemde başlayanlar" seçiliyse girmez. */
+    const xlsxText = async query => unzip(Buffer.from(await (await request('/api/rapor?bicim=xlsx&' + query, 'GET', null, cookie)).arrayBuffer()))['xl/worksheets/sheet1.xml'].toString('utf8');
+    assert.ok((await xlsxText('bas=2026-09-17&bit=2026-10-31')).includes('Yapay zekâ tanışma toplantısı'), 'döneme uzanan kayıt varsayılan olarak girer');
+    const baslayan = await xlsxText('bas=2026-09-17&bit=2026-10-31&baslayan=1');
+    assert.ok(baslayan.includes('Ortak robotik atölyesi') && !baslayan.includes('Yapay zekâ tanışma toplantısı'), 'yalnızca dönemde başlayanlar');
+    const tamamlanansiz = await xlsxText('bas=2026-09-01&bit=2026-10-31&tamamlanansiz=1');
+    assert.ok(tamamlanansiz.includes('Ortak robotik atölyesi') && tamamlanansiz.includes('Yapay zekâ tanışma toplantısı'), 'planlananlar tamamlananlar gizlenince de girer');
     /* Pencerede işaretli bırakılan kayıtlar: arama yerine yalnızca bu kimlikler girer. */
     const secilen = unzip(Buffer.from(await (await request(`/api/rapor?bas=2026-09-01&bit=2026-10-31&bicim=xlsx&ara=robotik&idler=${id}`, 'GET', null, cookie)).arrayBuffer()));
     const secilenXml = secilen['xl/worksheets/sheet1.xml'].toString('utf8');

@@ -154,6 +154,14 @@ const inRange = event => event.start < shiftDay(rangeTo, 1) + 'T00:00' && event.
 /** Görüntülenen dönemin (ay ya da tarih aralığı) süzgeçten geçmiş etkinlikleri. */
 const shownEvents = () => (rangeOn() ? filtered(allEvents).filter(inRange) : filtered(events).filter(inMonth));
 
+/** Takvim ve listedeki iki görünüm kutusu: tamamlananları gizle, yalnızca
+    seçilen tarihten (aralığın başı ya da ayın ilk günü) itibaren başlayanlar.
+    Sayaçlara uygulanmaz; onlar dönemin bütün etkinliklerini anlatır. */
+const viewStart = () => (rangeOn() ? rangeFrom : dateKey(month));
+const viewChecks = list => list.filter(e =>
+  !($('#hide-done').checked && e.status === 'Tamamlandı') &&
+  !($('#starts-in').checked && e.start < viewStart() + 'T00:00'));
+
 /** Sayaç dönemleri: program yılları 1 Eylül – 31 Ağustos. */
 const PROGRAM_YEARS = [1, 2, 3].map(n => ({ label: `${n}. Yıl`, from: `${2023 + n}-09-01`, to: `${2024 + n}-09-01` }));
 const inYear = ({ from, to }) => e => e.start < to + 'T00:00' && e.end > from + 'T00:00';
@@ -197,8 +205,8 @@ function render() {
   const ranged = rangeOn();
   $('#range-clear').hidden = !(rangeFrom || rangeTo);
   $('#month-title').textContent = ranged ? `${rangeFormat.format(new Date(rangeFrom + 'T12:00:00'))} – ${rangeFormat.format(new Date(rangeTo + 'T12:00:00'))}` : monthFormat.format(month);
-  const list = ranged ? filtered(allEvents) : filtered();
-  const current = shownEvents();
+  const list = viewChecks(ranged ? filtered(allEvents) : filtered());
+  const current = viewChecks(shownEvents());
   $('#count').textContent = `${ranged ? 'Seçilen aralıkta' : 'Bu ay'} ${current.length} etkinlik`;
   /* Sayaçlar varsayılan olarak tüm kayıtları, "Yalnızca görüntülenen ay"
      seçiliyse o ayı anlatır; başlık hangisi olduğunu yazar.
@@ -833,6 +841,7 @@ for (const selector of ['#range-from', '#range-to']) $(selector).addEventListene
   expandedDay = null;
   if (meta) render();
 });
+for (const selector of ['#hide-done', '#starts-in']) $(selector).addEventListener('change', () => { expandedDay = null; if (meta) render(); });
 $('#range-clear').onclick = () => {
   rangeFrom = rangeTo = $('#range-from').value = $('#range-to').value = '';
   expandedDay = null;
@@ -1085,6 +1094,9 @@ $('#report').onclick = () => {
   form.elements.city.value = $('#city-pick').value;
   /* Arama kutusu yan paneldeki aramayla gelir. */
   form.elements.search.value = $('#search').value.trim();
+  /* Görünüm kutuları takvimdeki seçimle gelir. */
+  form.elements.hideDone.checked = $('#hide-done').checked;
+  form.elements.startsIn.checked = $('#starts-in').checked;
   reportSkipped.clear();
   renderReportMatches();
   form.querySelector('.error').textContent = '';
@@ -1101,8 +1113,9 @@ function reportMatches() {
   if (query.length < 2 || !from.value || !to.value) return null;
   const next = shiftDay(to.value, 1) + 'T00:00';
   /* Raporda yalnızca etkinlik adına bakılır; açıklama ve paydaşlar aranmaz. */
-  const found = allEvents.filter(e => inPlace(e, city.value) && e.title.toLocaleLowerCase('tr-TR').includes(query)).sort((a, b) => b.start.localeCompare(a.start));
-  const inPeriod = e => e.start < next && e.end > from.value + 'T00:00';
+  const hideDone = form.elements.hideDone.checked, startsIn = form.elements.startsIn.checked;
+  const found = allEvents.filter(e => inPlace(e, city.value) && !(hideDone && e.status === 'Tamamlandı') && e.title.toLocaleLowerCase('tr-TR').includes(query)).sort((a, b) => b.start.localeCompare(a.start));
+  const inPeriod = e => e.start < next && e.end > from.value + 'T00:00' && !(startsIn && e.start < from.value + 'T00:00');
   /* Dönem dışındakiler ayrıca döner: "Dönemi genişlet" ile rapora alınabilsin. */
   return Object.assign(found.filter(inPeriod), { outside: found.filter(e => !inPeriod(e)) });
 }
@@ -1135,22 +1148,24 @@ $('#report-matches').addEventListener('click', event => {
   renderReportMatches();
 });
 
-$('#report-form').addEventListener('input', event => { if (['from', 'to', 'city', 'search'].includes(event.target.name)) renderReportMatches(); });
+$('#report-form').addEventListener('input', event => { if (['from', 'to', 'city', 'search', 'hideDone', 'startsIn'].includes(event.target.name)) renderReportMatches(); });
 $('#report-form').addEventListener('change', event => {
   if (event.target.name === 'ids') {
     if (event.target.checked) reportSkipped.delete(Number(event.target.value)); else reportSkipped.add(Number(event.target.value));
     renderReportMatches();
-  } else if (['from', 'to', 'city'].includes(event.target.name)) renderReportMatches();
+  } else if (['from', 'to', 'city', 'hideDone', 'startsIn'].includes(event.target.name)) renderReportMatches();
 });
 
 /** Bağlantı yerine fetch: oturum düşmüşse tarayıcı hata JSON'unu rapor
     dosyası diye kaydetmesin, mesaj pencerede görünsün. */
 $('#report-form').onsubmit = submitHandler(async form => {
-  const { from, to, format, city, search } = Object.fromEntries(new FormData(form));
+  const { from, to, format, city, search, hideDone, startsIn } = Object.fromEntries(new FormData(form));
   if (search.trim().length === 1) throw Error('Arama için en az 2 karakter yazın.');
   if (to < from) throw Error('Bitiş tarihi başlangıç tarihinden önce olamaz.');
   const params = new URLSearchParams({ bas: from, bit: to, bicim: format });
   if (city) params.set('il', city);
+  if (hideDone) params.set('tamamlanansiz', '1');
+  if (startsIn) params.set('baslayan', '1');
   const matches = reportMatches();
   if (matches) {
     const ids = matches.filter(e => !reportSkipped.has(e.id)).map(e => e.id);

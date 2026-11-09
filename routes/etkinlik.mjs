@@ -155,6 +155,11 @@ export function etkinlikRoutes({ db, logo }) {
       const list = ids.split(',').map(Number);
       clauses.push(`id IN (${list.map(() => '?').join(',')})`); params.push(...list);
     } else if (filters.search) { const search = searchSql(filters.search, ['title']); clauses.push(search.clause); params.push(...search.params); }
+    /* Görünüm kutuları: tamamlananlar hariç; yalnızca dönemin ilk gününden itibaren başlayanlar. */
+    filters.hideDone = url.searchParams.get('tamamlanansiz') === '1';
+    filters.startsIn = url.searchParams.get('baslayan') === '1';
+    if (filters.hideDone) { clauses.push('status<>?'); params.push('Tamamlandı'); }
+    if (filters.startsIn) { clauses.push('start>=?'); params.push(from + 'T00:00'); }
     const rows = await liveEvents(['start<?', '"end">?', ...clauses].join(' AND '), [next + 'T00:00', from + 'T00:00', ...params]);
     if (format === 'zip') {
       const entries = await photoArchive(rows);
